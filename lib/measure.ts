@@ -57,6 +57,8 @@ type RawMeasured = CaptureElement;
 export async function measureViewportElements(
   page: Page,
 ): Promise<RawMeasured[]> {
+  // Body must stay free of nested function declarations — tsx/esbuild injects
+  // __name helpers that do not exist in the browser context.
   return page.evaluate(() => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -86,11 +88,6 @@ export async function measureViewportElements(
         paddingBottom: number;
       };
     }> = [];
-
-    function parsePx(value: string): number {
-      const n = parseFloat(value);
-      return Number.isFinite(n) ? n : 0;
-    }
 
     const nodes = document.querySelectorAll<HTMLElement>("[data-dna-id]");
     for (const el of nodes) {
@@ -122,17 +119,26 @@ export async function measureViewportElements(
         Math.max(0, overlapArea / area),
       );
 
-      const fontSize = parsePx(cs.fontSize);
+      const fs = parseFloat(cs.fontSize);
+      const fontSize = Number.isFinite(fs) ? fs : 0;
+      const lhRaw = cs.lineHeight;
       let lineHeight: number;
-      if (cs.lineHeight === "normal") {
+      if (lhRaw === "normal") {
         lineHeight = fontSize * 1.2;
       } else {
-        lineHeight = parsePx(cs.lineHeight);
+        const lh = parseFloat(lhRaw);
+        lineHeight = Number.isFinite(lh) ? lh : 0;
       }
 
       const shadow = cs.boxShadow;
-      const boxShadow =
-        !shadow || shadow === "none" ? null : shadow;
+      const boxShadow = !shadow || shadow === "none" ? null : shadow;
+
+      const r = parseFloat(cs.borderTopLeftRadius);
+      const bw = parseFloat(cs.borderTopWidth);
+      const mt = parseFloat(cs.marginTop);
+      const mb = parseFloat(cs.marginBottom);
+      const pt = parseFloat(cs.paddingTop);
+      const pb = parseFloat(cs.paddingBottom);
 
       out.push({
         id,
@@ -149,13 +155,13 @@ export async function measureViewportElements(
           letterSpacing: cs.letterSpacing,
           color: cs.color,
           background: cs.backgroundColor,
-          radius: parsePx(cs.borderTopLeftRadius),
-          borderWidth: parsePx(cs.borderTopWidth),
+          radius: Number.isFinite(r) ? r : 0,
+          borderWidth: Number.isFinite(bw) ? bw : 0,
           boxShadow,
-          marginTop: parsePx(cs.marginTop),
-          marginBottom: parsePx(cs.marginBottom),
-          paddingTop: parsePx(cs.paddingTop),
-          paddingBottom: parsePx(cs.paddingBottom),
+          marginTop: Number.isFinite(mt) ? mt : 0,
+          marginBottom: Number.isFinite(mb) ? mb : 0,
+          paddingTop: Number.isFinite(pt) ? pt : 0,
+          paddingBottom: Number.isFinite(pb) ? pb : 0,
         },
       });
     }
