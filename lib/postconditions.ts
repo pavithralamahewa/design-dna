@@ -51,6 +51,13 @@ export const TOLERANCE_FONT_RATIO = 0.045;
 export const TOLERANCE_DELTA_E = 30;
 /** Common value must appear at least this many times more often than the rare one */
 export const STRAY_FREQUENCY_RATIO = 6;
+/** Strays used this many times or fewer are REVIEW — too few to call drift */
+export const STRAY_REVIEW_MAX_USES = 2;
+
+/** Finding note / postcondition reason for low-frequency strays. */
+export function strayFewUsesReason(n: number): string {
+  return `Used only ${n} time(s). Too few uses to tell drift from a deliberate one-off.`;
+}
 
 export type StylePropertyKey =
   | "radius"
@@ -291,12 +298,16 @@ export function detectStrayFindings(elements: MeasuredElement[]): Finding[] {
           : key === "fontSize"
             ? "Font-size stray"
             : "Spacing stray";
+      const uses = hit.targets.length;
+      const isReview = uses <= STRAY_REVIEW_MAX_USES;
       findings.push({
         id: `f-${key}-${hit.targets.join("-")}`,
         label,
-        class: "FAIL",
+        class: isReview ? "REVIEW" : "FAIL",
         value: `${formatPx(hit.before)} → ${formatPx(hit.expected)}`,
-        note: `${hit.targets.length} element(s) use ${formatPx(hit.before)} while ${formatPx(hit.expected)} is the merge target already on this page.`,
+        note: isReview
+          ? strayFewUsesReason(uses)
+          : `${uses} element(s) use ${formatPx(hit.before)} while ${formatPx(hit.expected)} is the merge target already on this page.`,
         elementIds: hit.targets,
       });
     }

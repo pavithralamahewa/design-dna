@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 import SamenessWall from "@/components/SamenessWall";
 import { parseCorpusJson, type CorpusEntry } from "@/lib/corpus";
 import type {
@@ -10,6 +18,7 @@ import type {
   MeasuredElement,
   Postcondition,
 } from "@/lib/mock-scan";
+import { buildRedlineTooltip } from "@/lib/redline-tooltip";
 // Bundle the 573-site dataset — do not depend on a racey fetch that can
 // briefly (or permanently, on a failed client parse) render an empty wall.
 import corpusJson from "../public/corpus.json";
@@ -19,6 +28,7 @@ type Props = {
 };
 
 const CORPUS_SITES: readonly CorpusEntry[] = parseCorpusJson(corpusJson).sites;
+const TIP_DELAY_MS = 120;
 
 function classSlug(c: Finding["class"]): string {
   return c.toLowerCase();
@@ -30,6 +40,150 @@ function clsLabel(c: Finding["class"]): string {
 
 function elementMap(els: MeasuredElement[]): Map<string, MeasuredElement> {
   return new Map(els.map((e) => [e.id, e]));
+}
+
+type TipPos = { left: number; top: number; side: "above" | "below" | "left" | "right" };
+
+function RedlineBox({
+  finding,
+  el,
+  elements,
+  viewportW,
+  pageHeight,
+}: {
+  finding: Finding;
+  el: MeasuredElement;
+  elements: MeasuredElement[];
+  viewportW: number;
+  pageHeight: number;
+}) {
+  const boxRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<number | null>(null);
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState<TipPos | null>(null);
+
+  const lines = useMemo(
+    () => buildRedlineTooltip(finding, el, elements),
+    [finding, el, elements],
+  );
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const show = useCallback(() => {
+    clearTimer();
+    timerRef.current = window.setTimeout(() => setOpen(true), TIP_DELAY_MS);
+  }, [clearTimer]);
+
+  const hide = useCallback(() => {
+    clearTimer();
+    setOpen(false);
+  }, [clearTimer]);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  useLayoutEffect(() => {
+    if (!open || !boxRef.current || !tipRef.current) {
+      setPos(null);
+      return;
+    }
+    const box = boxRef.current.getBoundingClientRect();
+    const tip = tipRef.current.getBoundingClientRect();
+    const gap = 8;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const candidates: TipPos[] = [
+      {
+        side: "above",
+        left: box.left + box.width / 2 - tip.width / 2,
+        top: box.top - tip.height - gap,
+      },
+      {
+        side: "below",
+        left: box.left + box.width / 2 - tip.width / 2,
+        top: box.bottom + gap,
+      },
+      {
+        side: "right",
+        left: box.right + gap,
+        top: box.top + box.height / 2 - tip.height / 2,
+      },
+      {
+        side: "left",
+        left: box.left - tip.width - gap,
+        top: box.top + box.height / 2 - tip.height / 2,
+      },
+    ];
+
+    const fits = (p: TipPos) =>
+      p.left >= 8 &&
+      p.top >= 8 &&
+      p.left + tip.width <= vw - 8 &&
+      p.top + tip.height <= vh - 8;
+
+    let chosen = candidates.find(fits) ?? candidates[0];
+    chosen = {
+      ...chosen,
+      left: Math.min(Math.max(8, chosen.left), vw - tip.width - 8),
+      top: Math.min(Math.max(8, chosen.top), vh - tip.height - 8),
+    };
+    setPos(chosen);
+  }, [open, lines]);
+
+  const k = classSlug(finding.class);
+
+  return (
+    <span
+      ref={boxRef}
+      className={`obox${finding.class === "FAIL" ? " deco" : ""}`}
+      style={{
+        left: `${(el.x / viewportW) * 100}%`,
+        top: `${(el.y / pageHeight) * 100}%`,
+        width: `${(el.w / viewportW) * 100}%`,
+        height: `${(el.h / pageHeight) * 100}%`,
+      }}
+      tabIndex={0}
+      role="button"
+      aria-label={`${finding.class} ${el.id}`}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+    >
+      <b>
+        {finding.class} · {el.id}
+      </b>
+      {open && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              ref={tipRef}
+              className={`otip${pos ? ` side-${pos.side}` : ""}`}
+              role="tooltip"
+              style={
+                pos
+                  ? { left: pos.left, top: pos.top, visibility: "visible" }
+                  : { left: -9999, top: -9999, visibility: "hidden" }
+              }
+            >
+              <div className="otip-hd">
+                <span className={`cls k-${k}`}>{lines.badge}</span>
+                <span className="otip-id">{lines.elementId}</span>
+              </div>
+              <p>{lines.measured}</p>
+              <p>{lines.pageContext}</p>
+              <p className="otip-fix">{lines.closing}</p>
+            </div>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
 }
 
 export function StageReport({ bundle }: Props) {
@@ -170,20 +324,14 @@ export function StageReport({ bundle }: Props) {
                 <img src={capture.image} alt={`Capture of ${capture.host}`} />
                 <div className="ov">
                   {boxes.map(({ finding, el }) => (
-                    <span
+                    <RedlineBox
                       key={`${finding.id}-${el.id}`}
-                      className={`obox${finding.class === "FAIL" ? " deco" : ""}`}
-                      style={{
-                        left: `${(el.x / capture.viewport.w) * 100}%`,
-                        top: `${(el.y / capture.pageHeight) * 100}%`,
-                        width: `${(el.w / capture.viewport.w) * 100}%`,
-                        height: `${(el.h / capture.pageHeight) * 100}%`,
-                      }}
-                    >
-                      <b>
-                        {finding.class} · {el.id}
-                      </b>
-                    </span>
+                      finding={finding}
+                      el={el}
+                      elements={capture.elements}
+                      viewportW={capture.viewport.w}
+                      pageHeight={capture.pageHeight}
+                    />
                   ))}
                 </div>
               </div>
