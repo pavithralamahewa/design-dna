@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { capturePageWithMeasure } from "@/lib/measure";
+import { isValidHttpUrl } from "@/lib/scan-errors";
 import { resolveScanKeys } from "@/lib/scan-keys";
 
 export const runtime = "nodejs";
@@ -8,15 +9,6 @@ export const maxDuration = 300;
 type Body = {
   url?: unknown;
 };
-
-function isValidHttpUrl(value: string): boolean {
-  try {
-    const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(request: Request) {
   let body: Body;
@@ -32,7 +24,11 @@ export async function POST(request: Request) {
   const url = typeof body.url === "string" ? body.url.trim() : "";
   if (!url || !isValidHttpUrl(url)) {
     return NextResponse.json(
-      { error: "Provide a valid http(s) url in { url }." },
+      {
+        error: "Provide a valid http(s) url in { url }.",
+        detail: url ? `Entered: ${url}` : "Empty URL",
+        kind: "invalid_url",
+      },
       { status: 400 },
     );
   }

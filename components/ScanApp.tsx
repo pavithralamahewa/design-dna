@@ -13,6 +13,10 @@ import {
   type Capture,
   type MockScanBundle,
 } from "@/lib/mock-scan";
+import {
+  classifyScanError,
+  type ScanUserError,
+} from "@/lib/scan-errors";
 import { resolveScanKeys } from "@/lib/scan-keys";
 import "@/app/scan/dna.css";
 
@@ -31,7 +35,7 @@ export function ScanApp() {
   const [url, setUrl] = useState("");
   const [capture, setCapture] = useState<Capture | null>(null);
   const [bundle, setBundle] = useState<MockScanBundle | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ScanUserError | null>(null);
   const [reportTab, setReportTab] = useState<ReportTab>("report");
   const [usedMock, setUsedMock] = useState(false);
   const scanGen = useRef(0);
@@ -54,7 +58,6 @@ export function ScanApp() {
     setError(null);
     setReportTab("report");
     setUsedMock(false);
-    // Drop scan deep-link params so a remount does not auto-restart.
     if (typeof window !== "undefined") {
       const path = window.location.pathname || "/";
       window.history.replaceState(null, "", path);
@@ -72,8 +75,6 @@ export function ScanApp() {
     setBundle(null);
     setUsedMock(false);
 
-    // Keep the inspected URL in the address bar without a full navigation.
-    // Also recovers when a pre-hydration form GET already wrote ?url=.
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       params.delete("stage");
@@ -86,7 +87,6 @@ export function ScanApp() {
       );
     }
 
-    // Enter the run stage immediately so the wait shows real work, not a blank dial.
     window.setTimeout(() => {
       if (gen !== scanGen.current) return;
       setStage("run");
@@ -100,8 +100,6 @@ export function ScanApp() {
 
       const asked = resolveScanKeys(nextUrl).host;
       const got = data.capture.host;
-      // Demo mock may keep Ledgerly numbers under the live demo host — still same specimen.
-      // For every other URL, refuse a host mismatch (rule 12/13).
       if (!isDemoScanUrl(nextUrl)) {
         const askedKey = asked.toLowerCase();
         const gotKey = got.toLowerCase();
@@ -117,9 +115,13 @@ export function ScanApp() {
       setBundle(data);
     } catch (e) {
       if (gen !== scanGen.current) return;
-      setError(e instanceof Error ? e.message : "Scan failed");
+      // Never show a partial report after a failed capture.
+      setCapture(null);
+      setBundle(null);
+      setError(classifyScanError(e));
       setStage("enter");
       setLeaving(false);
+      // Keep nextUrl in the field (already set above).
     }
   }, []);
 
@@ -136,7 +138,6 @@ export function ScanApp() {
     else scrollToId("verify");
   }, []);
 
-  // Boot from ?url= (form GET before hydration) or ?stage= (screenshot deep-links).
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
@@ -148,7 +149,6 @@ export function ScanApp() {
     }
     const want = params.get("stage");
     if (want !== "run" && want !== "results") return;
-    // Deep-link stages without ?url= are demo-only — never invent another host.
     let cancelled = false;
     (async () => {
       const data = await loadMockScan();
@@ -183,7 +183,20 @@ export function ScanApp() {
         onReportTab={onReportTab}
       />
       <AmbientLayer />
-      <StageEnter leaving={leaving} onSubmit={startScan} />
+      <StageEnter
+        leaving={leaving}
+        urlValue={url}
+        onUrlChange={setUrl}
+        error={error}
+        onSubmit={startScan}
+        onClientError={(err) => {
+          setCapture(null);
+          setBundle(null);
+          setError(err);
+          setStage("enter");
+          setLeaving(false);
+        }}
+      />
       {stage === "run" ? (
         <StageRun
           url={url || capture?.url || ""}
@@ -193,11 +206,6 @@ export function ScanApp() {
       ) : null}
       {stage === "results" && bundle ? (
         <StageReport bundle={bundle} />
-      ) : null}
-      {error ? (
-        <div className="wrap" role="alert" style={{ paddingBlock: 24 }}>
-          <p className="box">{error}</p>
-        </div>
       ) : null}
     </div>
   );

@@ -692,9 +692,11 @@ export async function runCapture(url: string): Promise<MockScanBundle> {
     } catch {
       /* ignore */
     }
-    throw new ScanAbsentError(
-      keys.host,
-      `No scan on file for ${keys.host}, and capture failed${detail ? `: ${detail}` : ""}`,
+    // Pass through the capture engine's message so the UI can classify it.
+    // Do not wrap in "No scan on file…" — that buried ERR_NAME_NOT_RESOLVED.
+    throw new Error(
+      detail ||
+        `Capture failed for ${keys.host} (HTTP ${res.status}). Nothing was measured.`,
     );
   }
 
