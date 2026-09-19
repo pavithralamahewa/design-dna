@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { capturePage } from "@/lib/capture";
+import { capturePageWithMeasure } from "@/lib/measure";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await capturePage(url);
+    const result = await capturePageWithMeasure(url);
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
