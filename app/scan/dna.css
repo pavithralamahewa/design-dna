@@ -439,6 +439,11 @@ h2.sh{font-weight:652;font-size:clamp(22px,2.5vw,29px);line-height:1.12;letter-s
   color:var(--ink-mid);max-width:66ch}
 .box b{color:var(--ink);font-weight:600}
 .box + .box{margin-top:10px}
+.guardrails.box{max-width:66ch}
+.guardrails .lev{font-family:inherit;font-size:15px;line-height:23px;color:var(--ink-mid);margin:0}
+.guardrails .lev li{padding-block:8px;border-bottom:1px solid var(--hair)}
+.guardrails .lev li:first-child{padding-top:0}
+.guardrails .lev li:last-child{border-bottom:0;padding-bottom:0}
 
 /* rhythm */
 .rhy{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:32px;align-items:start}

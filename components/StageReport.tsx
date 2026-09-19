@@ -247,6 +247,45 @@ export function StageReport({ bundle }: Props) {
         </div>
       </section>
 
+      </section>
+
+      <section className="wrap sec" id="guardrails">
+        <p className="eyebrow">Limits</p>
+        <h2 className="sh">What this tool will not do</h2>
+        <div className="box guardrails">
+          <ul className="lev">
+            <li>
+              No model is used anywhere in this product. Same page in, same
+              numbers out.
+            </li>
+            <li>
+              Every number traces to an element we measured. Nothing is
+              estimated.
+            </li>
+            <li>
+              Corrections are merge-only — we snap a rare value to one already
+              on the page. We never invent a value that isn&apos;t there.
+            </li>
+            <li>
+              A difference used twice or fewer is REVIEW, not a defect. Too few
+              uses to tell drift from a deliberate one-off.
+            </li>
+            <li>
+              There is no overall design score. We tried one; it rated an
+              AI-built page above stripe.com.
+            </li>
+            <li>
+              When we can&apos;t measure something we say UNSUPPORTED rather
+              than guessing.
+            </li>
+            <li>
+              When a page has no corpus match we say so. We never show another
+              site&apos;s data.
+            </li>
+          </ul>
+        </div>
+      </section>
+
       <footer className="wrap foot">
         <span>
           <b>Design DNA</b> — deterministic inspection for AI coding workflows

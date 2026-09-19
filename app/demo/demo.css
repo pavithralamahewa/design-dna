@@ -287,13 +287,13 @@
   box-shadow: var(--shadow);
 }
 
-/* SEEDED was 11px stray; verify proof left merge-only fix at system 12px */
+/* SEEDED: third feature card stays wrong at 11px for the demo/video. */
 .ledgerly-card.radius-system {
   border-radius: 12px;
 }
 
 .ledgerly-card.radius-stray {
-  border-radius: 12px;
+  border-radius: 11px;
 }
 
 .ledgerly-card .icon {
