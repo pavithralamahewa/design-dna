@@ -1,17 +1,8 @@
-# human.design
+# human.design (Design DNA)
 
-Deterministic design inspection for AI coding workflows. Paste a URL → capture a real headless Chromium paint → measure what the page actually renders.
+A **deterministic design inspection and verification tool for AI coding workflows**. Paste a URL; a real headless browser captures and measures what the page actually renders — computed styles and arithmetic only. **No model anywhere in the product.** Same page in, same numbers out. The AI in the story is your coding agent (e.g. Cursor), applying corrections from this evidence.
 
-## Stack
-
-- Next.js 15 (App Router, TypeScript)
-- Tailwind CSS
-- Playwright + Chromium (capture)
-- sharp (tile stitching)
-
-No database, no LLM calls. Scans persist under `.scans/`.
-
-## Getting started
+## How to run
 
 ```bash
 npm install
@@ -21,25 +12,33 @@ npm run dev -- -p 43123
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
-## Capture API
-
-`POST /api/capture` with body `{ "url": "https://example.com" }`.
-
-Returns the Capture contract shape: stitched PNG under `.scans/<slug>.png`, JSON under `.scans/<slug>.json`, viewport `1440×900`, `pageHeight` (stable scrollHeight poll), `tiles` (actual `scrollY` readbacks), and `elements: []`. If the page exceeds 16000px, capture stops at 16000 and sets `heightCapped` / `heightCapNote`.
-
-Capture never uses `page.screenshot({ fullPage: true })` — viewport-clipped tiles, fixed/sticky hidden after tile 0, stitch at real scroll offsets.
+Optional specimen captures:
 
 ```bash
-# Specimen capture (stripe.com + trumoveinc.com)
 npm run capture:specimens
 ```
 
-## Scripts
+## The scan → fix → verify loop
 
-| Script | Description |
+1. **Scan** — Paste a URL. The tool captures the page (stitched viewport tiles), measures rendered elements, and reports what drifted and where it sits on the page.
+2. **Fix** — Export checkable corrections (postconditions) for your coding agent. Apply them in the codebase.
+3. **Verify** — Re-scan. Each correction is checked against named targets only — **PASS** or **FAIL** per promise, never a global score.
+
+## Finding classes
+
+| Class | Meaning |
 | --- | --- |
-| `npm run dev` | Dev server (Turbopack) |
-| `npm run build` | Production build |
-| `npm start` | Serve production build |
-| `npm run lint` | ESLint |
-| `npm run capture:specimens` | Capture stripe.com + trumoveinc.lovable.app |
+| **PASS** | Satisfies the declared contract. |
+| **FAIL** | Violates a declared contract (enough repeats to call drift). |
+| **REVIEW** | A real measured difference whose rightness depends on intent — never auto-merged. |
+| **UNSUPPORTED** | Cannot be measured reliably on this page. |
+
+## Data provenance
+
+public/corpus.json is a dataset of 573 sites fingerprinted on 18 Sep 2026,
+before this event. It is data, not code. All code in this repository was
+written during the hackathon.
+
+## What this is not
+
+This tool does **not** claim responsive verification, autonomy, or a design quality score. Numbers you see are measurements you can point at on the page.
