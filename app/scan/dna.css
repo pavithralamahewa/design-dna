@@ -584,6 +584,8 @@ pre.code{margin:0;background:var(--fill);border-radius:10px;padding:18px;overflo
 .btn-a{background:var(--btn-bg);color:var(--btn-ink)} .btn-a:hover{opacity:.9}
 .copyrow{display:flex;gap:10px;align-items:center;margin-top:12px}
 .copied{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;color:var(--good)}
+.stage-export{padding-block:40px 56px}
+.stage-export pre.code{max-height:min(520px,70vh);white-space:pre-wrap;word-break:break-word}
 
 /* autopsy */
 .autogrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(206px,252px);gap:26px;align-items:start}

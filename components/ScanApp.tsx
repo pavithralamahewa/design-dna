@@ -6,6 +6,7 @@ import { ScanNav } from "@/components/ScanNav";
 import { StageEnter } from "@/components/StageEnter";
 import { StageRun } from "@/components/StageRun";
 import { StageReport } from "@/components/StageReport";
+import { StageExport } from "@/components/StageExport";
 import {
   isDemoScanUrl,
   loadMockScan,
@@ -133,6 +134,10 @@ export function ScanApp() {
 
   const onReportTab = useCallback((tab: ReportTab) => {
     setReportTab(tab);
+    if (tab === "export") {
+      window.setTimeout(() => scrollToId("export"), 40);
+      return;
+    }
     if (tab === "report") scrollToId("overview");
     else if (tab === "capture") scrollToId("redlines");
     else scrollToId("verify");
@@ -205,7 +210,11 @@ export function ScanApp() {
         />
       ) : null}
       {stage === "results" && bundle ? (
-        <StageReport bundle={bundle} />
+        reportTab === "export" ? (
+          <StageExport bundle={bundle} scanUrl={url || bundle.capture.url} />
+        ) : (
+          <StageReport bundle={bundle} />
+        )
       ) : null}
     </div>
   );
