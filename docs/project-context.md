@@ -151,6 +151,12 @@ Next.js 15 (App Router, TypeScript) · Playwright + Chromium · sharp for stitch
 
 ---
 
+## UI standing rule
+
+Build product UI from `docs/ui-reference.html` — the approved, signed-off design. Reuse its CSS token values and class naming; do not invent palette, type, or spacing. Class names **are** the structure (CSS-only reference). Do not copy JavaScript from the reference. If something is uncovered by the reference, ask before inventing it.
+
+---
+
 ## Scope guard — do NOT do these
 
 With several agents running, things wander. None of the following are in scope today:
