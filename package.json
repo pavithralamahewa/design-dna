@@ -6,10 +6,12 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "capture:specimens": "tsx scripts/run-capture-specimens.mts"
   },
   "dependencies": {
     "next": "15.5.25",
+    "playwright": "^1.63.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "sharp": "^0.35.4"
@@ -22,8 +24,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.5.25",
-    "playwright": "^1.63.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5"
   }
 }
