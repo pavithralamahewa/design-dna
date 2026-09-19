@@ -470,7 +470,11 @@ export function emitPostconditionsFromElements(
   return emitPostconditions(detectStrayFindings(elements), elements);
 }
 
-export function valuesMatch(
+/**
+ * Stray-detection proximity (3px / 4.5% / ΔE≤30). Used only when deciding
+ * whether a rare value may merge onto a common one — never for verify PASS.
+ */
+export function valuesWithinStrayTolerance(
   resolved: string,
   expected: string,
   styleKey: StylePropertyKey,
@@ -484,4 +488,28 @@ export function valuesMatch(
     return resolved.trim() === expected.trim();
   }
   return withinTolerance(a, b, styleKey);
+}
+
+/**
+ * Verify equality: target must resolve to expected, not merely "near" it.
+ * A third value within stray tolerance is still FAIL.
+ * Allows ≤0.5px measurement noise for lengths; colours must match exactly
+ * (or ΔE < 1 for float rounding in getComputedStyle).
+ */
+export function valuesMatch(
+  resolved: string,
+  expected: string,
+  styleKey: StylePropertyKey,
+): boolean {
+  if (styleKey === "color") {
+    if (resolved.trim() === expected.trim()) return true;
+    const d = deltaE76(resolved, expected);
+    return d !== null && d < 1;
+  }
+  const a = parsePx(resolved);
+  const b = parsePx(expected);
+  if (a === null || b === null) {
+    return resolved.trim() === expected.trim();
+  }
+  return Math.abs(a - b) <= 0.5;
 }

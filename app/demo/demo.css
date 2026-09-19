@@ -287,13 +287,13 @@
   box-shadow: var(--shadow);
 }
 
-/* SEEDED: radius drift — two cards 12px, third 11px (see page markup) */
+/* SEEDED was 11px stray; verify proof left merge-only fix at system 12px */
 .ledgerly-card.radius-system {
   border-radius: 12px;
 }
 
 .ledgerly-card.radius-stray {
-  border-radius: 11px;
+  border-radius: 12px;
 }
 
 .ledgerly-card .icon {
