@@ -16,6 +16,13 @@ import {
 import "@/app/scan/dna.css";
 
 type Stage = "enter" | "run" | "results";
+type ReportTab = "report" | "capture" | "export";
+
+function scrollToId(id: string) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  else window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 export function ScanApp() {
   const [stage, setStage] = useState<Stage>("enter");
@@ -24,6 +31,7 @@ export function ScanApp() {
   const [capture, setCapture] = useState<Capture | null>(null);
   const [bundle, setBundle] = useState<MockScanBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reportTab, setReportTab] = useState<ReportTab>("report");
 
   const reset = useCallback(() => {
     setStage("enter");
@@ -32,17 +40,18 @@ export function ScanApp() {
     setCapture(null);
     setBundle(null);
     setError(null);
+    setReportTab("report");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const startScan = useCallback(async (nextUrl: string) => {
     setError(null);
     setUrl(nextUrl);
     setLeaving(true);
+    setReportTab("report");
 
-    // Prefetch mock (or later: kick off real capture) while enter lifts away
     try {
       const data = USE_MOCK ? await loadMockScan() : await runCapture(nextUrl);
-      // Keep submitted URL on the capture identity line
       const withUrl: MockScanBundle = {
         ...data,
         capture: {
@@ -68,11 +77,21 @@ export function ScanApp() {
     window.setTimeout(() => {
       setStage("run");
       setLeaving(false);
+      window.scrollTo({ top: 0 });
     }, 420);
   }, []);
 
   const finishRun = useCallback(() => {
     setStage("results");
+    setReportTab("report");
+    window.scrollTo({ top: 0 });
+  }, []);
+
+  const onReportTab = useCallback((tab: ReportTab) => {
+    setReportTab(tab);
+    if (tab === "report") scrollToId("overview");
+    else if (tab === "capture") scrollToId("redlines");
+    else scrollToId("verify");
   }, []);
 
   // Deep-link helpers for screenshots / demos: ?stage=run|results
@@ -103,7 +122,9 @@ export function ScanApp() {
       <ScanNav
         stage={stage}
         findingsCount={bundle?.findings.length ?? 0}
+        reportTab={reportTab}
         onNewScan={reset}
+        onReportTab={onReportTab}
       />
       <AmbientLayer />
       <StageEnter leaving={leaving} onSubmit={startScan} />
@@ -114,7 +135,9 @@ export function ScanApp() {
           onComplete={finishRun}
         />
       ) : null}
-      {stage === "results" && bundle ? <StageReport bundle={bundle} /> : null}
+      {stage === "results" && bundle ? (
+        <StageReport bundle={bundle} />
+      ) : null}
       {error ? (
         <div className="wrap" role="alert" style={{ paddingBlock: 24 }}>
           <p className="box">{error}</p>

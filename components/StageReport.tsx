@@ -71,7 +71,7 @@ export function StageReport({ bundle }: Props) {
 
   return (
     <div className="stage-results">
-      <div className="wrap ovw">
+      <div className="wrap ovw" id="overview">
         <p className="ovwid">
           <b>{capture.host}</b> · captured {new Date(capture.capturedAt).toISOString()} ·{" "}
           {capture.viewport.w}×{capture.viewport.h} · page {capture.pageHeight}px

@@ -3,9 +3,9 @@
 import { FormEvent, useState } from "react";
 
 const RECENT = [
-  "127.0.0.1:43135/demo",
-  "stripe.com",
-  "linear.app",
+  "http://127.0.0.1:43135/demo",
+  "https://stripe.com",
+  "https://linear.app",
 ] as const;
 
 type Props = {
@@ -13,14 +13,22 @@ type Props = {
   onSubmit: (url: string) => void;
 };
 
+function normalizeUrl(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+
 export function StageEnter({ leaving, onSubmit }: Props) {
   const [url, setUrl] = useState("http://127.0.0.1:43135/demo");
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const trimmed = url.trim();
-    if (!trimmed) return;
-    onSubmit(trimmed);
+    const next = normalizeUrl(url);
+    if (!next) return;
+    setUrl(next);
+    onSubmit(next);
   }
 
   return (
@@ -39,8 +47,9 @@ export function StageEnter({ leaving, onSubmit }: Props) {
         </p>
         <form className="field" onSubmit={handleSubmit}>
           <input
-            type="url"
+            type="text"
             name="url"
+            inputMode="url"
             autoComplete="url"
             placeholder="https://…"
             value={url}
@@ -61,12 +70,11 @@ export function StageEnter({ leaving, onSubmit }: Props) {
               type="button"
               disabled={leaving}
               onClick={() => {
-                const next = host.startsWith("http") ? host : `https://${host}`;
-                setUrl(next);
-                onSubmit(next);
+                setUrl(host);
+                onSubmit(host);
               }}
             >
-              {host}
+              {host.replace(/^https?:\/\//, "")}
             </button>
           ))}
         </div>

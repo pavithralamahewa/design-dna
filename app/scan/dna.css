@@ -332,7 +332,8 @@ body[data-stage="enter"] #newscan,body[data-stage="run"] #newscan{display:none}
 @media (min-width:1280px){.nav-in{padding-inline:32px}}
 @media (min-width:1536px){.nav-in{padding-inline:56px}}
 .mark{display:inline-flex;align-items:baseline;gap:9px;margin-right:auto;font-weight:652;
-  letter-spacing:-.2px;font-size:17px;white-space:nowrap}
+  letter-spacing:-.2px;font-size:17px;white-space:nowrap;cursor:pointer;background:none;border:0;
+  font:inherit;color:inherit;padding:0}
 .mark .cnt{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:11px;font-weight:400;color:var(--ink-dim)}
 .tabs{display:flex;gap:20px;flex-wrap:wrap}
 .tabs button{font-weight:600;color:var(--ink-mid);padding:0 0 5px;border-bottom:2px solid transparent;
