@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import SamenessWall from "@/components/SamenessWall";
 import { parseCorpusJson, type CorpusEntry } from "@/lib/corpus";
 import type {
@@ -10,10 +10,15 @@ import type {
   MeasuredElement,
   Postcondition,
 } from "@/lib/mock-scan";
+// Bundle the 573-site dataset — do not depend on a racey fetch that can
+// briefly (or permanently, on a failed client parse) render an empty wall.
+import corpusJson from "../public/corpus.json";
 
 type Props = {
   bundle: MockScanBundle;
 };
+
+const CORPUS_SITES: readonly CorpusEntry[] = parseCorpusJson(corpusJson).sites;
 
 function classSlug(c: Finding["class"]): string {
   return c.toLowerCase();
@@ -31,30 +36,12 @@ export function StageReport({ bundle }: Props) {
   const { capture, findings, postconditions, facts, topFixes, components, fingerprint, verdict } =
     bundle;
   const [annoMode, setAnnoMode] = useState<"fail" | "all">("fail");
-  const [corpus, setCorpus] = useState<readonly CorpusEntry[]>([]);
-  const [corpusNote, setCorpusNote] = useState<string | null>(null);
+  const corpus = CORPUS_SITES;
+  const corpusNote =
+    corpus.length === 0
+      ? "Corpus data is missing. Nothing to compare against."
+      : null;
   const byId = useMemo(() => elementMap(capture.elements), [capture.elements]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/corpus.json");
-        if (!res.ok) {
-          if (!cancelled) setCorpusNote("Corpus file missing — wall cannot compare.");
-          return;
-        }
-        const data = await res.json();
-        const parsed = parseCorpusJson(data);
-        if (!cancelled) setCorpus(parsed.sites);
-      } catch {
-        if (!cancelled) setCorpusNote("Corpus failed to load — wall cannot compare.");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const redlineFindings = findings.filter((f) =>
     annoMode === "fail" ? f.class === "FAIL" || f.class === "REVIEW" : true,

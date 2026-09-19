@@ -169,7 +169,17 @@ body[data-stage="run"] #step2>.s2>*{animation:riseIn .46s var(--ease) backwards}
 body[data-stage="run"] #step2 .s2head{animation-delay:20ms}
 body[data-stage="run"] #step2 .prog{animation-delay:90ms}
 body[data-stage="run"] #step2 .s2grid{animation-delay:150ms}
-body[data-stage="results"] .stage-results>.wrap:first-child{animation:riseIn .5s var(--ease) backwards}
+/* Full contrast on the report header — never animate overview (riseIn fill can stick faint). */
+body[data-stage="results"] .stage-results>.wrap:first-child{
+  opacity:1;
+  animation:none;
+  transform:none;
+}
+body[data-stage="results"] #amb{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+}
 
 /* micro-interactions */
 .go{transition:transform .12s var(--ease),opacity var(--fast) var(--ease)}
@@ -599,7 +609,7 @@ input[type=range]{width:clamp(110px,18vw,200px);accent-color:var(--ink)}
   font-family:"Instrument Sans",-apple-system,"Helvetica Neue",Arial,sans-serif;
   font-weight:456;font-size:16px;line-height:22px;letter-spacing:.2px;-webkit-font-smoothing:antialiased}
 .dna-root[data-stage="run"] #amb{opacity:.38}
-.dna-root[data-stage="results"] #amb{opacity:0}
+.dna-root[data-stage="results"] #amb{opacity:0;visibility:hidden}
 .dna-root.leaving #step1>.s1>*{opacity:0;transform:translateY(-14px)}
 .dna-root.leaving #step1>.s1>h1{transition-delay:0ms}
 .dna-root.leaving #step1>.s1>.lede{transition-delay:40ms}
@@ -612,7 +622,11 @@ input[type=range]{width:clamp(110px,18vw,200px);accent-color:var(--ink)}
 .dna-root[data-stage="run"] #step2 .s2head{animation-delay:20ms}
 .dna-root[data-stage="run"] #step2 .prog{animation-delay:90ms}
 .dna-root[data-stage="run"] #step2 .s2grid{animation-delay:150ms}
-.dna-root[data-stage="results"] .stage-results>.wrap:first-child{animation:riseIn .5s var(--ease) backwards}
+.dna-root[data-stage="results"] .stage-results>.wrap:first-child{
+  opacity:1;
+  animation:none;
+  transform:none;
+}
 .stage-enter,.stage-run,.stage-results{display:none}
 .dna-root[data-stage="enter"] .stage-enter,
 .dna-root[data-stage="run"] .stage-run,
