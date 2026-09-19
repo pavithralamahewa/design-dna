@@ -1,6 +1,8 @@
 import { chromium, type Page } from "playwright";
 import sharp from "sharp";
 import { copyFile, mkdir, writeFile } from "fs/promises";
+import dns from "node:dns/promises";
+import net from "node:net";
 import path from "path";
 
 export const VIEWPORT = { w: 1440, h: 900 } as const;
@@ -10,7 +12,10 @@ export const TILE_PAUSE_MS = 250;
 export const HEIGHT_POLL_COUNT = 12;
 export const HEIGHT_POLL_MS = 300;
 export const MAX_PAGE_HEIGHT = 16000;
-export const GOTO_TIMEOUT_MS = 45_000;
+/** Navigation timeout for page.goto — fail fast; do not wait for tiles after reject. */
+export const GOTO_TIMEOUT_MS = 15_000;
+/** Hard ceiling for the entire capture+measure session. */
+export const CAPTURE_CEILING_MS = 45_000;
 
 const ANIMATION_PIN_CSS = `
 html { scroll-behavior: auto !important; }
@@ -73,6 +78,57 @@ export type CaptureOptions = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Fail before launching Chromium when the URL is invalid or DNS cannot resolve.
+ * ERR_NAME_NOT_RESOLVED-shaped so the UI classifier maps to the DNS sentence.
+ */
+export async function assertUrlReachable(url: string): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(
+      `Provide a valid http(s) url in { url }. Got protocol ${parsed.protocol}`,
+    );
+  }
+  const host = parsed.hostname;
+  if (!host) {
+    throw new Error(`Invalid URL: ${url}`);
+  }
+  if (host === "localhost" || net.isIP(host)) {
+    return;
+  }
+  try {
+    await dns.lookup(host);
+  } catch {
+    throw new Error(`page.goto: net::ERR_NAME_NOT_RESOLVED at ${url}`);
+  }
+}
+
+/** Reject if the whole capture exceeds CAPTURE_CEILING_MS. */
+export async function withCaptureCeiling<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(
+        new Error(
+          `Timeout ${CAPTURE_CEILING_MS}ms exceeded — capture did not settle`,
+        ),
+      );
+    }, CAPTURE_CEILING_MS);
+  });
+  // If the ceiling wins, the underlying work may still reject — swallow to avoid unhandled.
+  void work.catch(() => undefined);
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export function hostFromUrl(url: string): string {
@@ -272,6 +328,15 @@ export async function capturePage(
   url: string,
   options: CaptureOptions = {},
 ): Promise<CaptureResult> {
+  return withCaptureCeiling(capturePageInner(url, options));
+}
+
+async function capturePageInner(
+  url: string,
+  options: CaptureOptions = {},
+): Promise<CaptureResult> {
+  await assertUrlReachable(url);
+
   const browser = await chromium.launch({ headless: true });
   const capturedAt = new Date().toISOString();
 
@@ -281,10 +346,15 @@ export async function capturePage(
       deviceScaleFactor: 1,
     });
 
-    await page.goto(url, {
-      waitUntil: "networkidle",
-      timeout: GOTO_TIMEOUT_MS,
-    });
+    try {
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: GOTO_TIMEOUT_MS,
+      });
+    } catch (err) {
+      // Abort immediately — do not scroll, tile, or wait for measure.
+      throw err;
+    }
 
     await forceImagesEagerAndFonts(page);
     await revealScroll(page);

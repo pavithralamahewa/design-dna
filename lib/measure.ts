@@ -11,8 +11,10 @@ import {
   TILE_PAUSE_MS,
   TILE_STEP,
   VIEWPORT,
+  assertUrlReachable,
   hostFromUrl,
   slugFromHost,
+  withCaptureCeiling,
   type CaptureElement,
   type CaptureOptions,
   type CaptureResult,
@@ -377,11 +379,21 @@ async function stitchTiles(
 
 /**
  * Capture + measure in one paint. Same contract as capturePage, with elements[].
+ * page.goto failures abort immediately — no tiling. Whole session capped at 45s.
  */
 export async function capturePageWithMeasure(
   url: string,
   options: CaptureOptions = {},
 ): Promise<CaptureResult> {
+  return withCaptureCeiling(capturePageWithMeasureInner(url, options));
+}
+
+async function capturePageWithMeasureInner(
+  url: string,
+  options: CaptureOptions = {},
+): Promise<CaptureResult> {
+  await assertUrlReachable(url);
+
   const browser = await chromium.launch({ headless: true });
   const capturedAt = new Date().toISOString();
 
@@ -391,10 +403,15 @@ export async function capturePageWithMeasure(
       deviceScaleFactor: 1,
     });
 
-    await page.goto(url, {
-      waitUntil: "networkidle",
-      timeout: GOTO_TIMEOUT_MS,
-    });
+    try {
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: GOTO_TIMEOUT_MS,
+      });
+    } catch (err) {
+      // Abort immediately — do not wait for a tile after navigation failure.
+      throw err;
+    }
 
     await forceImagesEagerAndFonts(page);
     await revealScroll(page);
