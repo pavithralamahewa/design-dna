@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AmbientLayer } from "@/components/AmbientLayer";
 import { ScanNav } from "@/components/ScanNav";
 import { StageEnter } from "@/components/StageEnter";
@@ -52,6 +52,8 @@ export function ScanApp() {
   const [bundle, setBundle] = useState<MockScanBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reportTab, setReportTab] = useState<ReportTab>("report");
+  const scanGen = useRef(0);
+  const bootstrapped = useRef(false);
 
   useEffect(() => {
     document.body.dataset.stage = stage;
@@ -61,6 +63,7 @@ export function ScanApp() {
   }, [stage]);
 
   const reset = useCallback(() => {
+    scanGen.current += 1;
     setStage("enter");
     setLeaving(false);
     setUrl("");
@@ -68,10 +71,16 @@ export function ScanApp() {
     setBundle(null);
     setError(null);
     setReportTab("report");
+    // Drop scan deep-link params so a remount does not auto-restart.
+    if (typeof window !== "undefined") {
+      const path = window.location.pathname || "/";
+      window.history.replaceState(null, "", path);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
   const startScan = useCallback(async (nextUrl: string) => {
+    const gen = ++scanGen.current;
     setError(null);
     setUrl(nextUrl);
     setLeaving(true);
@@ -79,8 +88,23 @@ export function ScanApp() {
     setCapture(null);
     setBundle(null);
 
+    // Keep the inspected URL in the address bar without a full navigation.
+    // Also recovers when a pre-hydration form GET already wrote ?url=.
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      params.delete("stage");
+      params.set("url", nextUrl);
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname || "/"}${qs ? `?${qs}` : ""}`,
+      );
+    }
+
     // Enter the run stage immediately so the wait shows real work, not a blank dial.
     window.setTimeout(() => {
+      if (gen !== scanGen.current) return;
       setStage("run");
       setLeaving(false);
       window.scrollTo({ top: 0 });
@@ -88,10 +112,12 @@ export function ScanApp() {
 
     try {
       const data = USE_MOCK ? await loadMockScan() : await runCapture(nextUrl);
+      if (gen !== scanGen.current) return;
       const withUrl = withLiveHost(data, nextUrl);
       setCapture(withUrl.capture);
       setBundle(withUrl);
     } catch (e) {
+      if (gen !== scanGen.current) return;
       setError(e instanceof Error ? e.message : "Scan failed");
       setStage("enter");
       setLeaving(false);
@@ -111,9 +137,16 @@ export function ScanApp() {
     else scrollToId("verify");
   }, []);
 
-  // Deep-link helpers for screenshots / demos: ?stage=run|results
+  // Boot from ?url= (form GET before hydration) or ?stage= (screenshot deep-links).
   useEffect(() => {
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
     const params = new URLSearchParams(window.location.search);
+    const urlParam = params.get("url");
+    if (urlParam) {
+      void startScan(urlParam);
+      return;
+    }
     const want = params.get("stage");
     if (want !== "run" && want !== "results") return;
     let cancelled = false;
@@ -130,7 +163,7 @@ export function ScanApp() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [startScan]);
 
   return (
     <div

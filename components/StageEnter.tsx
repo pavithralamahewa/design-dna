@@ -55,12 +55,19 @@ export function StageEnter({ leaving, onSubmit }: Props) {
     [origin],
   );
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+  function launch() {
     const next = normalizeUrl(url);
     if (!next) return;
     setUrl(next);
     onSubmit(next);
+  }
+
+  function handleSubmit(e: FormEvent) {
+    // Always cancel native navigation — a GET before hydration remounts on
+    // /?url=… and used to leave the app stuck on the enter stage.
+    e.preventDefault();
+    e.stopPropagation();
+    launch();
   }
 
   return (
@@ -77,10 +84,15 @@ export function StageEnter({ leaving, onSubmit }: Props) {
           Real headless capture, measured elements, checkable corrections. Same
           page in — same numbers out.
         </p>
-        <form className="field" onSubmit={handleSubmit}>
+        {/* method=post + no name= avoids /?url= full reloads if JS is late */}
+        <form
+          className="field"
+          method="post"
+          action="#"
+          onSubmit={handleSubmit}
+        >
           <input
             type="text"
-            name="url"
             inputMode="url"
             autoComplete="url"
             placeholder="https://…"
@@ -89,7 +101,12 @@ export function StageEnter({ leaving, onSubmit }: Props) {
             disabled={leaving}
             aria-label="Page URL"
           />
-          <button className="go" type="submit" disabled={leaving}>
+          <button
+            className="go"
+            type="button"
+            disabled={leaving}
+            onClick={launch}
+          >
             Inspect
           </button>
         </form>
