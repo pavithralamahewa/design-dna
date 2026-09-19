@@ -247,8 +247,6 @@ export function StageReport({ bundle }: Props) {
         </div>
       </section>
 
-      </section>
-
       <section className="wrap sec" id="guardrails">
         <p className="eyebrow">Limits</p>
         <h2 className="sh">What this tool will not do</h2>
