@@ -7,12 +7,13 @@ import { StageEnter } from "@/components/StageEnter";
 import { StageRun } from "@/components/StageRun";
 import { StageReport } from "@/components/StageReport";
 import {
-  USE_MOCK,
+  isDemoScanUrl,
   loadMockScan,
   runCapture,
   type Capture,
   type MockScanBundle,
 } from "@/lib/mock-scan";
+import { resolveScanKeys } from "@/lib/scan-keys";
 import "@/app/scan/dna.css";
 
 type Stage = "enter" | "run" | "results";
@@ -24,26 +25,6 @@ function scrollToId(id: string) {
   else window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function hostFromUrl(raw: string): string {
-  try {
-    return new URL(raw).host;
-  } catch {
-    return raw;
-  }
-}
-
-function withLiveHost(bundle: MockScanBundle, nextUrl: string): MockScanBundle {
-  const host = hostFromUrl(nextUrl);
-  return {
-    ...bundle,
-    capture: {
-      ...bundle.capture,
-      url: nextUrl,
-      host,
-    },
-  };
-}
-
 export function ScanApp() {
   const [stage, setStage] = useState<Stage>("enter");
   const [leaving, setLeaving] = useState(false);
@@ -52,6 +33,7 @@ export function ScanApp() {
   const [bundle, setBundle] = useState<MockScanBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reportTab, setReportTab] = useState<ReportTab>("report");
+  const [usedMock, setUsedMock] = useState(false);
   const scanGen = useRef(0);
   const bootstrapped = useRef(false);
 
@@ -71,6 +53,7 @@ export function ScanApp() {
     setBundle(null);
     setError(null);
     setReportTab("report");
+    setUsedMock(false);
     // Drop scan deep-link params so a remount does not auto-restart.
     if (typeof window !== "undefined") {
       const path = window.location.pathname || "/";
@@ -87,6 +70,7 @@ export function ScanApp() {
     setReportTab("report");
     setCapture(null);
     setBundle(null);
+    setUsedMock(false);
 
     // Keep the inspected URL in the address bar without a full navigation.
     // Also recovers when a pre-hydration form GET already wrote ?url=.
@@ -111,11 +95,26 @@ export function ScanApp() {
     }, 280);
 
     try {
-      const data = USE_MOCK ? await loadMockScan() : await runCapture(nextUrl);
+      const data = await runCapture(nextUrl);
       if (gen !== scanGen.current) return;
-      const withUrl = withLiveHost(data, nextUrl);
-      setCapture(withUrl.capture);
-      setBundle(withUrl);
+
+      const asked = resolveScanKeys(nextUrl).host;
+      const got = data.capture.host;
+      // Demo mock may keep Ledgerly numbers under the live demo host — still same specimen.
+      // For every other URL, refuse a host mismatch (rule 12/13).
+      if (!isDemoScanUrl(nextUrl)) {
+        const askedKey = asked.toLowerCase();
+        const gotKey = got.toLowerCase();
+        if (askedKey !== gotKey) {
+          throw new Error(
+            `Scan host mismatch: asked for ${asked}, got ${got}. Refusing to show another site's data.`,
+          );
+        }
+      }
+
+      setUsedMock(isDemoScanUrl(nextUrl));
+      setCapture(data.capture);
+      setBundle(data);
     } catch (e) {
       if (gen !== scanGen.current) return;
       setError(e instanceof Error ? e.message : "Scan failed");
@@ -149,15 +148,20 @@ export function ScanApp() {
     }
     const want = params.get("stage");
     if (want !== "run" && want !== "results") return;
+    // Deep-link stages without ?url= are demo-only — never invent another host.
     let cancelled = false;
     (async () => {
       const data = await loadMockScan();
       if (cancelled) return;
       const liveUrl = `${window.location.origin}/demo`;
-      const withUrl = withLiveHost(data, liveUrl);
+      const host = resolveScanKeys(liveUrl).host;
       setUrl(liveUrl);
-      setCapture(withUrl.capture);
-      setBundle(withUrl);
+      setUsedMock(true);
+      setCapture({ ...data.capture, url: liveUrl, host });
+      setBundle({
+        ...data,
+        capture: { ...data.capture, url: liveUrl, host },
+      });
       setStage(want);
     })();
     return () => {
@@ -169,7 +173,7 @@ export function ScanApp() {
     <div
       className={`dna-root${leaving ? " leaving" : ""}`}
       data-stage={stage}
-      data-mock={USE_MOCK ? "true" : "false"}
+      data-mock={usedMock ? "true" : "false"}
     >
       <ScanNav
         stage={stage}

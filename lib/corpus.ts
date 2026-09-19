@@ -104,7 +104,8 @@ export function resolveSite(
   corpus: readonly CorpusEntry[] = [],
 ): SiteIdentity {
   const normalized = normalizeHost(host);
-  const slug = hostToSlug(normalized);
+  // Match capture.ts slugFromHost so .scans/<slug>.json keys agree (rule 12).
+  const slug = normalized.replace(/[^a-zA-Z0-9._-]+/g, "_");
   const corpusKey = normalized;
   const thumbnailPath = `/thumbs/${slug}.webp`;
   const scanPath = `.scans/${slug}.json`;

@@ -251,7 +251,7 @@ export function StageReport({ bundle }: Props) {
         <span>
           <b>Design DNA</b> — deterministic inspection for AI coding workflows
         </span>
-        <span>No model calls · mock scan flag in lib/mock-scan.ts</span>
+        <span>No model calls · scans keyed by host under .scans/</span>
       </footer>
     </div>
   );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { capturePageWithMeasure } from "@/lib/measure";
+import { resolveScanKeys } from "@/lib/scan-keys";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -38,7 +39,12 @@ export async function POST(request: Request) {
 
   try {
     const result = await capturePageWithMeasure(url);
-    return NextResponse.json(result);
+    const keys = resolveScanKeys(result.host || url);
+    // Client must never receive a filesystem path — serve via host-keyed API.
+    return NextResponse.json({
+      ...result,
+      image: keys.apiImagePath,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(

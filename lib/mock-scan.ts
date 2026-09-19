@@ -1,9 +1,23 @@
 /**
- * Mock scan bundle shaped like Capture / Finding / Postcondition contracts.
- * Flip USE_MOCK to false when wiring real `/api/capture`.
+ * Scan bundle shaped like Capture / Finding / Postcondition contracts.
+ * Demo (/demo) uses the Ledgerly mock. Every other URL loads that host's
+ * scan only — never a relabelled mock (rules 12 & 13).
  */
 
-export const USE_MOCK = true;
+import {
+  detectStrayFindings,
+  emitPostconditions,
+} from "@/lib/postconditions";
+import {
+  hostsMatch,
+  isDemoScanUrl,
+  resolveScanKeys,
+} from "@/lib/scan-keys";
+
+export { isDemoScanUrl, resolveScanKeys, hostsMatch } from "@/lib/scan-keys";
+
+/** @deprecated Prefer isDemoScanUrl / runCapture. Kept false so UI never auto-mocks. */
+export const USE_MOCK = false;
 
 export type ElementStyles = {
   fontSize: number;
@@ -407,7 +421,62 @@ export const MOCK_VERDICT = {
   sub: "Everything else on this page is either on-system or marked REVIEW for intent — no composite quality score.",
 };
 
-function annotate(capture: Capture): MockScanBundle {
+function fingerprintFromElements(elements: MeasuredElement[]): TokenFingerprint {
+  const fonts: number[] = [];
+  const radii: number[] = [];
+  const spacing: number[] = [];
+  const sizes: number[] = [];
+  const seen = {
+    fonts: new Set<number>(),
+    radii: new Set<number>(),
+    spacing: new Set<number>(),
+    sizes: new Set<number>(),
+  };
+
+  for (const el of elements) {
+    const fs = el.styles.fontSize;
+    if (Number.isFinite(fs) && !seen.fonts.has(fs)) {
+      seen.fonts.add(fs);
+      fonts.push(fs);
+    }
+    const r = el.styles.radius;
+    if (Number.isFinite(r) && !seen.radii.has(r)) {
+      seen.radii.add(r);
+      radii.push(r);
+    }
+    for (const sp of [
+      el.styles.marginTop,
+      el.styles.marginBottom,
+      el.styles.paddingTop,
+      el.styles.paddingBottom,
+    ]) {
+      if (Number.isFinite(sp) && sp !== 0 && !seen.spacing.has(sp)) {
+        seen.spacing.add(sp);
+        spacing.push(sp);
+      }
+    }
+    const dim = Math.round(el.w);
+    if (dim > 0 && !seen.sizes.has(dim)) {
+      seen.sizes.add(dim);
+      sizes.push(dim);
+    }
+  }
+
+  fonts.sort((a, b) => b - a);
+  radii.sort((a, b) => a - b);
+  spacing.sort((a, b) => a - b);
+  sizes.sort((a, b) => a - b);
+
+  return {
+    fonts: fonts.slice(0, 24),
+    radii: radii.slice(0, 24),
+    spacing: spacing.slice(0, 24),
+    sizes: sizes.slice(0, 24),
+    groundLuminance: [],
+  };
+}
+
+function annotateMock(capture: Capture): MockScanBundle {
   const elementCount = capture.elements.length;
   const facts: ReportFact[] = [
     {
@@ -436,35 +505,177 @@ function annotate(capture: Capture): MockScanBundle {
   };
 }
 
-/** Load mock capture (from public JSON when present). */
-export async function loadMockScan(): Promise<MockScanBundle> {
-  if (!USE_MOCK) {
-    throw new Error("USE_MOCK is false — call real /api/capture instead");
+/** Live / stored scan — findings from THIS capture's elements only. */
+function annotateLive(capture: Capture): MockScanBundle {
+  const findings = detectStrayFindings(capture.elements);
+  const postconditions = emitPostconditions(findings, capture.elements);
+  const failCount = findings.filter((f) => f.class === "FAIL").length;
+  const reviewCount = findings.filter((f) => f.class === "REVIEW").length;
+
+  const facts: ReportFact[] = [
+    {
+      value: String(capture.elements.length),
+      label: "Elements",
+      detail: "Measured in one paint with the stitched capture",
+    },
+    {
+      value: String(capture.tiles.length),
+      label: "Tiles",
+      detail: `Scroll positions read back: ${capture.tiles.map((t) => t.y).join(" · ")}`,
+    },
+    {
+      value:
+        failCount > 0
+          ? `${failCount} FAIL`
+          : reviewCount > 0
+            ? `${reviewCount} REVIEW`
+            : "0 FAIL",
+      label: "Contracts",
+      detail:
+        failCount > 0
+          ? `${failCount} merge-only stray(s) on this host`
+          : "No merge-only strays detected on this host",
+    },
+    {
+      value: "negligible",
+      label: "Decoration share",
+      detail: "Decoration share not scored for live scans — absence over invention",
+    },
+  ];
+
+  const topFixes: TopFix[] = findings
+    .filter((f) => f.class === "FAIL" || f.class === "REVIEW")
+    .slice(0, 3)
+    .map((f, i) => ({
+      n: i + 1,
+      title: `${f.label}: ${f.value}`,
+      detail: f.note,
+      jump: `#finding-${f.id}`,
+    }));
+
+  if (topFixes.length === 0) {
+    topFixes.push({
+      n: 1,
+      title: "No merge-only fixes on this scan",
+      detail: "Nothing to snap — this host's measured values stand alone.",
+      jump: "#findings",
+    });
   }
 
+  const verdict =
+    failCount > 0
+      ? {
+          headline: `${failCount} measured stray${failCount === 1 ? "" : "s"} on this page`,
+          emphasis: `${failCount} measured stray${failCount === 1 ? "" : "s"}`,
+          sub: `Host ${capture.host} — findings computed from this capture only.`,
+        }
+      : {
+          headline: "No merge-only strays on this capture",
+          emphasis: "No merge-only strays",
+          sub: `Host ${capture.host} — absence reported, not filled with another site's data.`,
+        };
+
+  return {
+    capture,
+    findings,
+    postconditions,
+    facts,
+    topFixes,
+    components: [],
+    fingerprint: fingerprintFromElements(capture.elements),
+    verdict,
+  };
+}
+
+/** Load Ledgerly mock — only for /demo (or explicit mock callers). */
+export async function loadMockScan(): Promise<MockScanBundle> {
   try {
     const res = await fetch("/mock-scan.json", { cache: "no-store" });
     if (res.ok) {
       const capture = (await res.json()) as Capture;
-      return annotate(capture);
+      return annotateMock(capture);
     }
   } catch {
     /* fall through */
   }
 
-  return annotate(FALLBACK_CAPTURE);
+  return annotateMock(FALLBACK_CAPTURE);
 }
 
 /**
- * When USE_MOCK is false, swap this for a POST to `/api/capture`.
- * One-line change at the call site in ScanApp.
+ * Load the scan record for this URL's host only.
+ * Returns null when absent — never another host's bundle (rule 13).
+ */
+export async function loadHostScan(url: string): Promise<MockScanBundle | null> {
+  const keys = resolveScanKeys(url);
+  const res = await fetch(keys.apiJsonPath, { cache: "no-store" });
+  if (res.status === 404) return null;
+  if (res.status === 409) {
+    throw new Error(`Scan on disk is mis-keyed for ${keys.host}`);
+  }
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `Failed to load scan (${res.status})`);
+  }
+
+  const capture = (await res.json()) as Capture;
+  if (!hostsMatch(capture.host, keys.host)) {
+    throw new Error(
+      `Refusing mismatched scan: asked for ${keys.host}, record is ${capture.host}`,
+    );
+  }
+
+  // Ensure image is the host-keyed API path even if JSON was written with a file path.
+  const withImage: Capture = {
+    ...capture,
+    image: keys.apiImagePath,
+  };
+  return annotateLive(withImage);
+}
+
+export class ScanAbsentError extends Error {
+  host: string;
+  constructor(host: string, detail?: string) {
+    super(
+      detail ||
+        `No scan on file for ${host}. Capture it first, or try again when the capture API is available.`,
+    );
+    this.name = "ScanAbsentError";
+    this.host = host;
+  }
+}
+
+/**
+ * Resolve a scan for `url`:
+ * - /demo → Ledgerly mock only
+ * - else → that host's stored scan, else live capture
+ * - never relabel another site's data
  */
 export async function runCapture(url: string): Promise<MockScanBundle> {
-  if (USE_MOCK) {
-    // Honest wait is driven by StageRun (15–20s of tiled capture + measure).
-    // Here we only resolve the finished bundle once the run UI completes.
-    void url;
-    return loadMockScan();
+  if (isDemoScanUrl(url)) {
+    const bundle = await loadMockScan();
+    // Keep Ledgerly numbers; only align url/host to the demo address being inspected.
+    return {
+      ...bundle,
+      capture: {
+        ...bundle.capture,
+        url,
+        host: resolveScanKeys(url).host,
+      },
+    };
+  }
+
+  const keys = resolveScanKeys(url);
+
+  const stored = await loadHostScan(url);
+  if (stored) {
+    return {
+      ...stored,
+      capture: {
+        ...stored.capture,
+        url, // preserve the requested URL; host stays from the record
+      },
+    };
   }
 
   const res = await fetch("/api/capture", {
@@ -472,9 +683,32 @@ export async function runCapture(url: string): Promise<MockScanBundle> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url }),
   });
+
   if (!res.ok) {
-    throw new Error(`Capture failed (${res.status})`);
+    let detail = "";
+    try {
+      const body = (await res.json()) as { detail?: string; error?: string };
+      detail = body.detail || body.error || "";
+    } catch {
+      /* ignore */
+    }
+    throw new ScanAbsentError(
+      keys.host,
+      `No scan on file for ${keys.host}, and capture failed${detail ? `: ${detail}` : ""}`,
+    );
   }
+
   const capture = (await res.json()) as Capture;
-  return annotate(capture);
+  if (!hostsMatch(capture.host, keys.host)) {
+    throw new Error(
+      `Capture host mismatch: asked for ${keys.host}, got ${capture.host}`,
+    );
+  }
+
+  return annotateLive({
+    ...capture,
+    image: capture.image?.startsWith("/")
+      ? capture.image
+      : keys.apiImagePath,
+  });
 }
