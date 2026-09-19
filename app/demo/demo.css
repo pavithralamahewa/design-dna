@@ -287,13 +287,13 @@
   box-shadow: var(--shadow);
 }
 
-/* SEEDED: third feature card stays wrong at 11px for the demo/video. */
+/* System radius — third feature card brought onto the page token. */
 .ledgerly-card.radius-system {
   border-radius: 12px;
 }
 
 .ledgerly-card.radius-stray {
-  border-radius: 11px;
+  border-radius: 12px;
 }
 
 .ledgerly-card .icon {
