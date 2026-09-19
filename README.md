@@ -12,11 +12,13 @@ npm run dev -- -p 43123
 
 Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
-Optional specimen captures:
+Optional specimen captures (writes `.scans/<host>.{json,png}`):
 
 ```bash
 npm run capture:specimens
 ```
+
+Production on Vercel cannot launch Playwright/Chromium. Host-keyed specimens for demos ship in `scans/` (`stripe.com`, `linear.app`) and are served via `/api/scans/<host>` before any live capture attempt. Local captures still prefer `.scans/` when present. `/demo` uses the Ledgerly mock in `public/mock-scan.json`.
 
 ## The scan → fix → verify loop
 

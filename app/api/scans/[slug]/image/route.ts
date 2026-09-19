@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { access, readFile } from "fs/promises";
-import path from "path";
+import { readStoredScanImage } from "@/lib/scan-store";
 
 export const runtime = "nodejs";
 
@@ -14,22 +13,27 @@ export async function GET(_request: Request, ctx: Ctx) {
     return NextResponse.json({ error: "Invalid scan slug." }, { status: 400 });
   }
 
-  const imagePath = path.join(process.cwd(), ".scans", `${slug}.png`);
   try {
-    await access(imagePath);
-  } catch {
+    const stored = await readStoredScanImage(slug);
+    if (!stored) {
+      return NextResponse.json(
+        { error: "No capture image on file for this host.", slug, absence: true },
+        { status: 404 },
+      );
+    }
+
+    return new NextResponse(new Uint8Array(stored.buffer), {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+      },
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(
-      { error: "No capture image on file for this host.", slug, absence: true },
-      { status: 404 },
+      { error: "Failed to read capture image", detail: message },
+      { status: 500 },
     );
   }
-
-  const buf = await readFile(imagePath);
-  return new NextResponse(buf, {
-    status: 200,
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "no-store",
-    },
-  });
 }

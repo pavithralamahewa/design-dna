@@ -40,6 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local scan artifacts
+# local scan artifacts (writable captures)
 .scans/
+# committed read-only specimens for production live under scans/ (tracked)
 .worktrees/

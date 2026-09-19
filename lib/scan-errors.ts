@@ -16,6 +16,7 @@ export type ScanUserError = {
     | "forbidden"
     | "not_found"
     | "invalid_url"
+    | "capture_unavailable"
     | "other";
 };
 
@@ -30,6 +31,8 @@ const MESSAGES = {
   not_found: "That page doesn't exist at that address.",
   invalid_url:
     "That doesn't look like a web address. It needs to start with http:// or https://.",
+  capture_unavailable:
+    "Live capture isn't available on this server. Try stripe.com, linear.app, or /demo — those have stored measurements — or run the app locally with Playwright.",
   other:
     "The capture didn't complete. Nothing was measured, so there is nothing to report.",
 } as const;
@@ -143,6 +146,21 @@ export function classifyScanError(err: unknown): ScanUserError {
     text.includes("provide a valid")
   ) {
     return { kind: "invalid_url", message: MESSAGES.invalid_url, detail };
+  }
+
+  if (
+    text.includes("capture_unavailable") ||
+    text.includes("chromium") ||
+    text.includes("playwright") ||
+    text.includes("live browser capture is not available") ||
+    text.includes("live capture isn't available") ||
+    text.includes("executable doesn't exist")
+  ) {
+    return {
+      kind: "capture_unavailable",
+      message: MESSAGES.capture_unavailable,
+      detail,
+    };
   }
 
   return { kind: "other", message: MESSAGES.other, detail };
