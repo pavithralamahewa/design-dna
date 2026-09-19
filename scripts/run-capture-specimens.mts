@@ -1,9 +1,9 @@
 /**
- * One-off runner: capture specimen URLs with the same logic as POST /api/capture.
- * Usage: npx tsx scripts/run-capture-specimens.mts
+ * Specimen runner — same capturePage() as POST /api/capture.
+ * Usage: npm run capture:specimens
  */
 import { capturePage } from "../lib/capture.ts";
-import { writeFile, mkdir, access } from "fs/promises";
+import { access, mkdir, writeFile } from "fs/promises";
 import path from "path";
 
 const STORE_MEDIA =
@@ -14,96 +14,91 @@ const STORE_INTERNAL =
 const specimens = [
   {
     url: "https://stripe.com",
-    png: path.join(STORE_MEDIA, "capture-stripe.png"),
-    meta: path.join(STORE_MEDIA, "capture-stripe.json"),
+    copyTo: path.join(STORE_MEDIA, "capture-stripe-v2.png"),
   },
   {
-    url: "https://trumoveinc.lovable.app",
-    png: path.join(STORE_MEDIA, "capture-trumove.png"),
-    meta: path.join(STORE_MEDIA, "capture-trumove.json"),
+    url: "https://trumoveinc.com",
+    copyTo: path.join(STORE_MEDIA, "capture-trumoveinc.png"),
   },
 ] as const;
-
-async function assertExists(filePath: string): Promise<void> {
-  await access(filePath);
-}
 
 async function main() {
   await mkdir(STORE_MEDIA, { recursive: true });
   await mkdir(STORE_INTERNAL, { recursive: true });
 
-  const summary: unknown[] = [];
+  const summary: Array<{
+    url: string;
+    pageHeight: number;
+    heightCapped: boolean;
+    heightCapNote?: string;
+    tileCount: number;
+    tileYs: number[];
+    image: string;
+    json: string;
+    copyTo: string;
+    elapsedMs: number;
+  }> = [];
 
   for (const spec of specimens) {
-    console.log(`Capturing ${spec.url} → ${spec.png}`);
+    console.log(`Capturing ${spec.url}`);
     const started = Date.now();
-    const result = await capturePage(spec.url, { imagePath: spec.png });
+    const result = await capturePage(spec.url, { copyImageTo: spec.copyTo });
     const elapsedMs = Date.now() - started;
 
-    await assertExists(spec.png);
+    await access(result.image);
+    await access(result.json);
+    await access(spec.copyTo);
 
-    const meta = {
+    const entry = {
       url: result.url,
-      host: result.host,
-      capturedAt: result.capturedAt,
-      viewport: result.viewport,
       pageHeight: result.pageHeight,
       heightCapped: result.heightCapped,
-      heightCapNote: result.heightCapNote ?? null,
+      heightCapNote: result.heightCapNote,
       tileCount: result.tiles.length,
-      tiles: result.tiles,
+      tileYs: result.tiles.map((t) => t.y),
       image: result.image,
-      elementCount: result.elements.length,
+      json: result.json,
+      copyTo: spec.copyTo,
       elapsedMs,
     };
-
-    await writeFile(spec.meta, JSON.stringify(meta, null, 2));
-    summary.push(meta);
+    summary.push(entry);
 
     console.log(
-      `  done: pageHeight=${result.pageHeight} tiles=${result.tiles.length} capped=${result.heightCapped} (${elapsedMs}ms)`,
+      `  pageHeight=${result.pageHeight} tiles=${result.tiles.length} capped=${result.heightCapped}`,
     );
-    if (result.heightCapNote) {
-      console.log(`  NOTE: ${result.heightCapNote}`);
-    }
+    console.log(`  tileYs=[${entry.tileYs.join(", ")}]`);
+    console.log(`  image=${result.image}`);
+    console.log(`  copy=${spec.copyTo}`);
+    if (result.heightCapNote) console.log(`  NOTE: ${result.heightCapNote}`);
   }
 
-  const summaryPath = path.join(STORE_INTERNAL, "capture-api-run.md");
+  const reportPath = path.join(STORE_INTERNAL, "capture-api-v2-run.md");
   const lines = [
     "---",
-    'cursor:',
+    "cursor:",
     '  subagentId: "bc-1deb9aff-4b98-561d-8a68-8d0c57d095f3"',
     "---",
     "",
-    "# Capture API specimen run",
+    "# Capture API v2 specimen run",
     "",
-    ...summary.map((s) => {
-      const m = s as {
-        url: string;
-        image: string;
-        pageHeight: number;
-        heightCapped: boolean;
-        heightCapNote: string | null;
-        tileCount: number;
-        elapsedMs: number;
-      };
-      return [
-        `## ${m.url}`,
-        "",
-        `- PNG: \`${m.image}\``,
-        `- pageHeight: ${m.pageHeight}`,
-        `- heightCapped: ${m.heightCapped}`,
-        m.heightCapNote ? `- note: ${m.heightCapNote}` : null,
-        `- tiles: ${m.tileCount}`,
-        `- elapsedMs: ${m.elapsedMs}`,
-        "",
-      ]
-        .filter(Boolean)
-        .join("\n");
-    }),
-  ];
-  await writeFile(summaryPath, lines.join("\n"));
-  console.log(`Summary written to ${summaryPath}`);
+    ...summary.flatMap((s) => [
+      `## ${s.url}`,
+      "",
+      `- pageHeight: **${s.pageHeight}**`,
+      `- heightCapped: ${s.heightCapped}`,
+      s.heightCapNote ? `- note: ${s.heightCapNote}` : null,
+      `- tile count: **${s.tileCount}**`,
+      `- tile y (actual): \`${JSON.stringify(s.tileYs)}\``,
+      `- scans PNG: \`${s.image}\``,
+      `- scans JSON: \`${s.json}\``,
+      `- media PNG: \`${s.copyTo}\``,
+      `- elapsedMs: ${s.elapsedMs}`,
+      "",
+    ]),
+  ].filter((l) => l !== null);
+
+  await writeFile(reportPath, lines.join("\n"));
+  console.log(`Report: ${reportPath}`);
 }
 
 main().catch((err) => {

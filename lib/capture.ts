@@ -1,18 +1,24 @@
 import { chromium, type Page } from "playwright";
 import sharp from "sharp";
-import { mkdir, writeFile } from "fs/promises";
+import { copyFile, mkdir, writeFile } from "fs/promises";
 import path from "path";
 
 export const VIEWPORT = { w: 1440, h: 900 } as const;
 export const TILE_STEP = 900;
-export const SCROLL_PAUSE_MS = 400;
+export const REVEAL_PAUSE_MS = 400;
+export const TILE_PAUSE_MS = 250;
 export const HEIGHT_POLL_COUNT = 12;
-export const HEIGHT_POLL_MS = 900;
+export const HEIGHT_POLL_MS = 300;
 export const MAX_PAGE_HEIGHT = 16000;
+export const GOTO_TIMEOUT_MS = 45_000;
 
 const ANIMATION_PIN_CSS = `
-html{scroll-behavior:auto!important}
-*,*::before,*::after{transition:none!important;animation-delay:0s!important;animation-duration:0s!important;animation-fill-mode:forwards!important;animation-iteration-count:1!important;scroll-snap-type:none!important;scroll-behavior:auto!important}
+html { scroll-behavior: auto !important; }
+*, *::before, *::after {
+  animation-play-state: paused !important;
+  transition: none !important;
+  animation-delay: 0s !important;
+}
 `;
 
 export type CaptureElement = {
@@ -51,27 +57,25 @@ export type CaptureResult = {
   capturedAt: string;
   viewport: { w: number; h: number };
   pageHeight: number;
-  /** True when the live page was taller than MAX_PAGE_HEIGHT and we only captured the first 16000px. */
+  /** True when live scrollHeight exceeded MAX_PAGE_HEIGHT — never silent. */
   heightCapped: boolean;
-  /** Present when heightCapped — never silently truncate. */
   heightCapNote?: string;
   image: string;
+  json: string;
   elements: CaptureElement[];
   tiles: CaptureTile[];
 };
 
 export type CaptureOptions = {
-  /** Absolute or project-relative path for the stitched PNG. Defaults under `.scans/`. */
-  imagePath?: string;
-  /** Also return a data URL in `image` instead of a filesystem path. */
-  asDataUrl?: boolean;
+  /** Extra copy of the stitched PNG (absolute path). Primary always `.scans/<slug>.png`. */
+  copyImageTo?: string;
 };
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function hostFromUrl(url: string): string {
+export function hostFromUrl(url: string): string {
   try {
     return new URL(url).host;
   } catch {
@@ -79,28 +83,39 @@ function hostFromUrl(url: string): string {
   }
 }
 
-function slugFromHost(host: string): string {
+export function slugFromHost(host: string): string {
   return host.replace(/[^a-zA-Z0-9._-]+/g, "_");
 }
 
-async function forceImagesEager(page: Page): Promise<void> {
+async function forceImagesEagerAndFonts(page: Page): Promise<void> {
   await page.evaluate(async () => {
-    const imgs = Array.from(document.querySelectorAll("img"));
-    for (const img of imgs) {
+    const lazy = Array.from(
+      document.querySelectorAll<HTMLImageElement>("img[loading=lazy]"),
+    );
+    for (const img of lazy) {
       img.setAttribute("loading", "eager");
-      if (img.hasAttribute("decoding")) {
+      img.setAttribute("decoding", "sync");
+    }
+
+    const all = Array.from(document.querySelectorAll<HTMLImageElement>("img"));
+    for (const img of all) {
+      if (!img.getAttribute("decoding")) {
         img.setAttribute("decoding", "sync");
       }
     }
+
     await Promise.all(
-      imgs.map((img) => {
-        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-        return img
-          .decode()
-          .catch(() => undefined)
-          .then(() => undefined);
-      }),
+      all
+        .filter((img) => img.complete === false)
+        .map((img) =>
+          img
+            .decode()
+            .catch(() => undefined)
+            .then(() => undefined),
+        ),
     );
+
+    await document.fonts.ready;
   });
 }
 
@@ -110,57 +125,62 @@ async function revealScroll(page: Page): Promise<void> {
     await page.evaluate((scrollY) => {
       window.scrollTo(0, scrollY);
     }, y);
-    await sleep(SCROLL_PAUSE_MS);
+    await sleep(REVEAL_PAUSE_MS);
   }
   await page.evaluate(() => {
     window.scrollTo(0, 0);
   });
-  await sleep(SCROLL_PAUSE_MS);
+  await sleep(REVEAL_PAUSE_MS);
 }
 
-async function pinAnimations(page: Page): Promise<void> {
-  await page.addStyleTag({ content: ANIMATION_PIN_CSS });
-}
+/**
+ * Poll scrollHeight every 300ms, up to 12 times, until the same value
+ * appears twice in a row (SPA growth settled).
+ */
+async function pollStableScrollHeight(page: Page): Promise<number> {
+  let previous: number | null = null;
+  let height = 0;
 
-async function pollMaxScrollHeight(page: Page): Promise<number> {
-  let max = 0;
   for (let i = 0; i < HEIGHT_POLL_COUNT; i++) {
-    const h = await page.evaluate(() => document.documentElement.scrollHeight);
-    if (h > max) max = h;
+    height = await page.evaluate(() => document.documentElement.scrollHeight);
+    if (previous !== null && height === previous) {
+      return height;
+    }
+    previous = height;
     if (i < HEIGHT_POLL_COUNT - 1) {
       await sleep(HEIGHT_POLL_MS);
     }
   }
-  return max;
+
+  return height;
 }
 
-async function markFixedSticky(page: Page): Promise<void> {
+async function pinAnimationsAndReveals(page: Page): Promise<void> {
+  await page.addStyleTag({ content: ANIMATION_PIN_CSS });
+
+  // Force common reveal-library targets visible only where they are still opacity 0.
   await page.evaluate(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>("*"));
+    const nodes = document.querySelectorAll<HTMLElement>(
+      '[data-aos], .reveal, [class*="fade"], [class*="slide"]',
+    );
     for (const el of nodes) {
-      const pos = getComputedStyle(el).position;
-      if (pos === "fixed" || pos === "sticky") {
-        el.setAttribute("data-dna-fixed-sticky", pos);
+      if (getComputedStyle(el).opacity === "0") {
+        el.style.setProperty("opacity", "1", "important");
+        el.style.setProperty("transform", "none", "important");
       }
     }
   });
 }
 
-async function setFixedStickyHidden(page: Page, hide: boolean): Promise<void> {
-  await page.evaluate((shouldHide) => {
-    document.documentElement.toggleAttribute("data-dna-hide-fixed", shouldHide);
-  }, hide);
-}
-
-async function ensureHideStyle(page: Page): Promise<void> {
-  await page.addStyleTag({
-    content: `html[data-dna-hide-fixed] [data-dna-fixed-sticky],
-html[data-dna-hide-fixed] [data-dna-fixed-sticky]::before,
-html[data-dna-hide-fixed] [data-dna-fixed-sticky]::after {
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
-}`,
+async function hideFixedAndSticky(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>("*"));
+    for (const el of nodes) {
+      const pos = getComputedStyle(el).position;
+      if (pos === "fixed" || pos === "sticky") {
+        el.style.setProperty("visibility", "hidden", "important");
+      }
+    }
   });
 }
 
@@ -170,53 +190,48 @@ type RawTile = {
   buffer: Buffer;
 };
 
+/**
+ * Tile at y = 0, 900, 1800… Read back scrollY. Stop when actualY stops increasing
+ * or requested y reaches pageHeight (honours 16000 cap).
+ * After tile 0, hide fixed/sticky. Screenshot is viewport clip only — never fullPage.
+ */
 async function captureTiles(
   page: Page,
   pageHeight: number,
 ): Promise<RawTile[]> {
-  await markFixedSticky(page);
-  await ensureHideStyle(page);
-
   const tiles: RawTile[] = [];
-  const requestedYs: number[] = [];
+  let previousActualY = -1;
+
   for (let y = 0; y < pageHeight; y += TILE_STEP) {
-    requestedYs.push(y);
-  }
-  // Ensure we cover the bottom even when pageHeight isn't a multiple of step
-  const lastRequested = Math.max(0, pageHeight - VIEWPORT.h);
-  if (!requestedYs.includes(lastRequested) && lastRequested > 0) {
-    requestedYs.push(lastRequested);
-  }
+    await page.evaluate((scrollY) => {
+      window.scrollTo(0, scrollY);
+    }, y);
+    await sleep(TILE_PAUSE_MS);
 
-  let isFirst = true;
-  const seenY = new Set<number>();
+    const actualY = await page.evaluate(() => window.scrollY);
 
-  for (const requestedY of requestedYs) {
-    await page.evaluate((y) => {
-      window.scrollTo(0, y);
-    }, requestedY);
-
-    // Brief settle so layout catches up after scroll
-    await sleep(50);
-
-    const actualY = await page.evaluate(() => Math.round(window.scrollY));
-    if (seenY.has(actualY)) {
-      continue;
-    }
-    seenY.add(actualY);
-
-    if (!isFirst) {
-      await setFixedStickyHidden(page, true);
-    } else {
-      await setFixedStickyHidden(page, false);
+    if (actualY <= previousActualY) {
+      break;
     }
 
-    const buffer = Buffer.from(await page.screenshot({ type: "png" }));
-    const meta = await sharp(buffer).metadata();
-    const height = meta.height ?? VIEWPORT.h;
+    if (tiles.length > 0) {
+      await hideFixedAndSticky(page);
+    }
 
-    tiles.push({ y: actualY, height, buffer });
-    isFirst = false;
+    const buffer = Buffer.from(
+      await page.screenshot({
+        type: "png",
+        clip: {
+          x: 0,
+          y: 0,
+          width: VIEWPORT.w,
+          height: VIEWPORT.h,
+        },
+      }),
+    );
+
+    tiles.push({ y: actualY, height: VIEWPORT.h, buffer });
+    previousActualY = actualY;
   }
 
   return tiles;
@@ -230,23 +245,18 @@ async function stitchTiles(
     throw new Error("No tiles to stitch");
   }
 
-  const canvasHeight = Math.max(
-    pageHeight,
-    ...tiles.map((t) => t.y + t.height),
-  );
-
   const composites = tiles.map((t) => ({
     input: t.buffer,
-    top: t.y,
+    top: Math.round(t.y),
     left: 0,
   }));
 
   return sharp({
     create: {
       width: VIEWPORT.w,
-      height: canvasHeight,
-      channels: 3,
-      background: { r: 255, g: 255, b: 255 },
+      height: pageHeight,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
     },
   })
     .composite(composites)
@@ -271,49 +281,46 @@ export async function capturePage(
       deviceScaleFactor: 1,
     });
 
-    await page.goto(url, { waitUntil: "networkidle", timeout: 120_000 });
+    await page.goto(url, {
+      waitUntil: "networkidle",
+      timeout: GOTO_TIMEOUT_MS,
+    });
 
-    await forceImagesEager(page);
+    await forceImagesEagerAndFonts(page);
     await revealScroll(page);
-    await pinAnimations(page);
 
-    const rawHeight = await pollMaxScrollHeight(page);
+    const rawHeight = await pollStableScrollHeight(page);
     const heightCapped = rawHeight > MAX_PAGE_HEIGHT;
     const pageHeight = Math.min(rawHeight, MAX_PAGE_HEIGHT);
 
-    // Scroll to top before tiling
+    await pinAnimationsAndReveals(page);
+
     await page.evaluate(() => {
       window.scrollTo(0, 0);
     });
-    await sleep(100);
+    await sleep(TILE_PAUSE_MS);
 
     const rawTiles = await captureTiles(page, pageHeight);
+
     const stitched = await stitchTiles(rawTiles, pageHeight);
 
     const host = hostFromUrl(url);
+    const slug = slugFromHost(host);
     const scansDir = path.join(process.cwd(), ".scans");
     await mkdir(scansDir, { recursive: true });
 
-    const defaultPath = path.join(
-      scansDir,
-      `${slugFromHost(host)}-${Date.now()}.png`,
-    );
-    const imagePath = options.imagePath
-      ? path.isAbsolute(options.imagePath)
-        ? options.imagePath
-        : path.join(process.cwd(), options.imagePath)
-      : defaultPath;
-
-    await mkdir(path.dirname(imagePath), { recursive: true });
+    const imagePath = path.join(scansDir, `${slug}.png`);
+    const jsonPath = path.join(scansDir, `${slug}.json`);
     await writeFile(imagePath, stitched);
 
-    const image = options.asDataUrl
-      ? `data:image/png;base64,${stitched.toString("base64")}`
-      : imagePath;
+    if (options.copyImageTo) {
+      await mkdir(path.dirname(options.copyImageTo), { recursive: true });
+      await copyFile(imagePath, options.copyImageTo);
+    }
 
     const tiles: CaptureTile[] = rawTiles.map((t) => ({
       y: t.y,
-      height: t.height,
+      height: VIEWPORT.h,
     }));
 
     const result: CaptureResult = {
@@ -323,8 +330,8 @@ export async function capturePage(
       viewport: { w: VIEWPORT.w, h: VIEWPORT.h },
       pageHeight,
       heightCapped,
-      image,
-      // Stage 1: capture only — measurement comes in a later stage (same paint later).
+      image: imagePath,
+      json: jsonPath,
       elements: [],
       tiles,
     };
@@ -332,6 +339,8 @@ export async function capturePage(
     if (heightCapped) {
       result.heightCapNote = `Page scrollHeight was ${rawHeight}px; captured only the first ${MAX_PAGE_HEIGHT}px.`;
     }
+
+    await writeFile(jsonPath, JSON.stringify(result, null, 2));
 
     return result;
   } finally {

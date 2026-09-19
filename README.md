@@ -25,12 +25,12 @@ Open [http://127.0.0.1:43123](http://127.0.0.1:43123).
 
 `POST /api/capture` with body `{ "url": "https://example.com" }`.
 
-Returns the Capture contract shape: stitched PNG path, viewport `1440×900`, `pageHeight`, `tiles` (actual `scrollY` readbacks), and `elements` (empty until measurement stage). If the page exceeds 16000px, capture stops at 16000 and sets `heightCapped` / `heightCapNote`.
+Returns the Capture contract shape: stitched PNG under `.scans/<slug>.png`, JSON under `.scans/<slug>.json`, viewport `1440×900`, `pageHeight` (stable scrollHeight poll), `tiles` (actual `scrollY` readbacks), and `elements: []`. If the page exceeds 16000px, capture stops at 16000 and sets `heightCapped` / `heightCapNote`.
 
-Capture never uses `page.screenshot({ fullPage: true })` — it scrolls, tiles, hides fixed/sticky after the first tile, and stitches at real scroll offsets.
+Capture never uses `page.screenshot({ fullPage: true })` — viewport-clipped tiles, fixed/sticky hidden after tile 0, stitch at real scroll offsets.
 
 ```bash
-# Specimen capture (writes media PNGs when store paths are available)
+# Specimen capture (stripe.com + trumoveinc.com)
 npm run capture:specimens
 ```
 
