@@ -1,0 +1,476 @@
+/* Ledgerly demo — scoped styles for /demo */
+
+.ledgerly {
+  --ink: #0f1f1a;
+  --ink-muted: #4a5c55;
+  --paper: #f4f7f5;
+  --surface: #ffffff;
+  --line: #d5e0db;
+  --accent: #1a6b4a;
+  --accent-hover: #14553a;
+  --accent-soft: #e6f3ed;
+  --warm: #c45c26;
+  --radius: 12px;
+  --radius-btn: 8px;
+  --shadow: 0 1px 2px rgba(15, 31, 26, 0.06), 0 8px 24px rgba(15, 31, 26, 0.06);
+
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
+  min-height: 100vh;
+  line-height: 1.5;
+}
+
+.ledgerly * {
+  box-sizing: border-box;
+}
+
+.ledgerly a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ledgerly .wrap {
+  width: min(1080px, calc(100% - 2.5rem));
+  margin-inline: auto;
+}
+
+/* Nav */
+.ledgerly-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--line);
+  background: rgba(244, 247, 245, 0.92);
+  backdrop-filter: blur(8px);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.ledgerly-nav .brand {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+.ledgerly-nav .nav-links {
+  display: flex;
+  align-items: center;
+  gap: 1.75rem;
+  font-size: 0.9375rem;
+  color: var(--ink-muted);
+}
+
+.ledgerly-nav .nav-links a:hover {
+  color: var(--ink);
+}
+
+/* Buttons — shared secondary style */
+.ledgerly .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: var(--radius-btn);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.ledgerly .btn:hover {
+  border-color: #b7c9c0;
+  background: #fafcfb;
+}
+
+.ledgerly .btn-solid {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.ledgerly .btn-solid:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  color: #fff;
+}
+
+/* SEEDED: INTENTIONAL — must stay different */
+.ledgerly .btn-cta-primary {
+  background: var(--warm);
+  border: none;
+  border-radius: 999px;
+  color: #fff;
+  padding: 0.85rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 8px 20px rgba(196, 92, 38, 0.28);
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ledgerly .btn-cta-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(196, 92, 38, 0.34);
+  color: #fff;
+}
+
+/* Hero */
+.ledgerly-hero {
+  padding: 4.5rem 0 0;
+  display: grid;
+  gap: 2.5rem;
+}
+
+@media (min-width: 900px) {
+  .ledgerly-hero {
+    grid-template-columns: 1.05fr 0.95fr;
+    align-items: center;
+    gap: 3rem;
+    padding-top: 5rem;
+  }
+}
+
+.ledgerly-hero h1 {
+  font-size: clamp(2.25rem, 4.5vw, 3.35rem);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  font-weight: 750;
+  margin: 0 0 1rem;
+}
+
+.ledgerly-hero .lede {
+  font-size: 1.125rem;
+  color: var(--ink-muted);
+  max-width: 34rem;
+  margin: 0 0 1.75rem;
+}
+
+.ledgerly-hero .cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.ledgerly-hero .fine {
+  margin-top: 0.85rem;
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.ledgerly-hero-visual {
+  background: linear-gradient(145deg, #163d30 0%, #1a6b4a 55%, #2d8f66 100%);
+  border-radius: 16px;
+  padding: 1.5rem;
+  min-height: 280px;
+  box-shadow: var(--shadow);
+  color: #e8f5ef;
+  position: relative;
+  overflow: hidden;
+}
+
+.ledgerly-hero-visual::after {
+  content: "";
+  position: absolute;
+  inset: auto -20% -40% 40%;
+  height: 70%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.18), transparent 65%);
+  pointer-events: none;
+}
+
+.ledgerly-invoice {
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 1.25rem 1.35rem;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+}
+
+.ledgerly-invoice .inv-top {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 1.1rem;
+  font-size: 0.8125rem;
+  color: var(--ink-muted);
+}
+
+.ledgerly-invoice .inv-brand {
+  font-weight: 700;
+  color: var(--accent);
+  font-size: 0.9375rem;
+}
+
+.ledgerly-invoice .inv-amount {
+  font-size: 1.75rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  margin: 0.25rem 0 1rem;
+}
+
+.ledgerly-invoice .inv-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.875rem;
+}
+
+/* Sections — vertical rhythm intentionally seeded */
+.ledgerly-section {
+  /* default; each section overrides margin-top for seeded gaps */
+}
+
+.ledgerly-features {
+  /* SEEDED: spacing drift — first gap after hero */
+  margin-top: 96px;
+}
+
+.ledgerly-pricing {
+  /* SEEDED: spacing drift */
+  margin-top: 96px;
+}
+
+.ledgerly-testimonial {
+  /* SEEDED: spacing drift — 88px instead of 96px */
+  margin-top: 88px;
+}
+
+.ledgerly-footer {
+  /* SEEDED: spacing drift */
+  margin-top: 96px;
+}
+
+.ledgerly-section .section-head {
+  max-width: 36rem;
+  margin-bottom: 2rem;
+}
+
+.ledgerly-section h2 {
+  font-size: clamp(1.65rem, 3vw, 2.1rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0 0 0.65rem;
+}
+
+.ledgerly-section .section-head p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 1.0625rem;
+}
+
+/* Feature cards */
+.ledgerly-feature-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .ledgerly-feature-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.ledgerly-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 1.5rem 1.4rem;
+  box-shadow: var(--shadow);
+}
+
+/* SEEDED: radius drift — two cards 12px, third 11px (see page markup) */
+.ledgerly-card.radius-system {
+  border-radius: 12px;
+}
+
+.ledgerly-card.radius-stray {
+  border-radius: 11px;
+}
+
+.ledgerly-card .icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.875rem;
+  margin-bottom: 1rem;
+}
+
+.ledgerly-card h3 {
+  margin: 0 0 0.5rem;
+  font-size: 1.0625rem;
+  letter-spacing: -0.02em;
+}
+
+.ledgerly-card p {
+  margin: 0;
+  color: var(--ink-muted);
+  font-size: 0.9375rem;
+}
+
+/* Reveal-on-scroll */
+.ledgerly-reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.ledgerly-reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Pricing */
+.ledgerly-price-grid {
+  display: grid;
+  gap: 1.25rem;
+}
+
+@media (min-width: 768px) {
+  .ledgerly-price-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.ledgerly-plan {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.6rem 1.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ledgerly-plan.featured {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+  background: linear-gradient(180deg, #f7fbf9 0%, #ffffff 40%);
+}
+
+.ledgerly-plan .plan-name {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-muted);
+}
+
+.ledgerly-plan .plan-price {
+  font-size: 2rem;
+  font-weight: 750;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.ledgerly-plan .plan-price span {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--ink-muted);
+}
+
+.ledgerly-plan ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.55rem;
+  flex: 1;
+}
+
+.ledgerly-plan li {
+  font-size: 0.9375rem;
+  color: var(--ink-muted);
+  padding-left: 1.25rem;
+  position: relative;
+}
+
+.ledgerly-plan li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45rem;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* Testimonial */
+.ledgerly-quote {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 2rem 1.75rem;
+  box-shadow: var(--shadow);
+  max-width: 44rem;
+}
+
+.ledgerly-quote blockquote {
+  margin: 0 0 1.25rem;
+  font-size: clamp(1.15rem, 2.2vw, 1.4rem);
+  line-height: 1.45;
+  letter-spacing: -0.02em;
+  font-weight: 550;
+}
+
+.ledgerly-quote .who {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font-size: 0.9375rem;
+}
+
+.ledgerly-quote .who strong {
+  font-weight: 700;
+}
+
+.ledgerly-quote .who span {
+  color: var(--ink-muted);
+}
+
+/* Footer */
+.ledgerly-footer-inner {
+  border-top: 1px solid var(--line);
+  padding: 2rem 0 2.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink-muted);
+  font-size: 0.875rem;
+}
+
+.ledgerly-footer-inner .brand {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.ledgerly-footer-inner nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .ledgerly-nav .nav-links a:not(.btn) {
+    display: none;
+  }
+
+  .ledgerly-hero {
+    padding-top: 2.75rem;
+  }
+}
