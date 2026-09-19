@@ -39,6 +39,7 @@ export function SamenessWall({
   const matchesToShow = showMatches
     ? result.top5.filter((m) => m.score >= MATCH_FLOOR)
     : [];
+  const top = result.closest;
 
   return (
     <section
@@ -68,6 +69,27 @@ export function SamenessWall({
         >
           {result.absenceNote}
         </p>
+      ) : null}
+
+      {top ? (
+        <div
+          className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-700"
+          data-jaccard-inputs="true"
+          data-top-host={top.host}
+          data-top-score={String(top.score)}
+        >
+          <div className="font-medium text-neutral-900">
+            Top candidate inputs — {top.host} → {formatPct(top.score)}
+          </div>
+          <ul className="mt-2 space-y-1 font-mono tabular-nums">
+            {top.explain.channels.map((c) => (
+              <li key={c.key}>
+                {c.key}: w={c.weight} · scan={c.scanCount} · corpus={c.corpusCount} · ∩=
+                {c.intersection} · J={c.jaccard.toFixed(3)} · wJ={c.weighted.toFixed(3)}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {!identity.hasThumbnail && identity.hasCorpusEntry ? (

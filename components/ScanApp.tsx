@@ -24,6 +24,26 @@ function scrollToId(id: string) {
   else window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function hostFromUrl(raw: string): string {
+  try {
+    return new URL(raw).host;
+  } catch {
+    return raw;
+  }
+}
+
+function withLiveHost(bundle: MockScanBundle, nextUrl: string): MockScanBundle {
+  const host = hostFromUrl(nextUrl);
+  return {
+    ...bundle,
+    capture: {
+      ...bundle.capture,
+      url: nextUrl,
+      host,
+    },
+  };
+}
+
 export function ScanApp() {
   const [stage, setStage] = useState<Stage>("enter");
   const [leaving, setLeaving] = useState(false);
@@ -32,6 +52,13 @@ export function ScanApp() {
   const [bundle, setBundle] = useState<MockScanBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reportTab, setReportTab] = useState<ReportTab>("report");
+
+  useEffect(() => {
+    document.body.dataset.stage = stage;
+    return () => {
+      delete document.body.dataset.stage;
+    };
+  }, [stage]);
 
   const reset = useCallback(() => {
     setStage("enter");
@@ -49,36 +76,26 @@ export function ScanApp() {
     setUrl(nextUrl);
     setLeaving(true);
     setReportTab("report");
+    setCapture(null);
+    setBundle(null);
 
-    try {
-      const data = USE_MOCK ? await loadMockScan() : await runCapture(nextUrl);
-      const withUrl: MockScanBundle = {
-        ...data,
-        capture: {
-          ...data.capture,
-          url: nextUrl,
-          host: (() => {
-            try {
-              return new URL(nextUrl).host;
-            } catch {
-              return data.capture.host;
-            }
-          })(),
-        },
-      };
-      setCapture(withUrl.capture);
-      setBundle(withUrl);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Scan failed");
-      setLeaving(false);
-      return;
-    }
-
+    // Enter the run stage immediately so the wait shows real work, not a blank dial.
     window.setTimeout(() => {
       setStage("run");
       setLeaving(false);
       window.scrollTo({ top: 0 });
-    }, 420);
+    }, 280);
+
+    try {
+      const data = USE_MOCK ? await loadMockScan() : await runCapture(nextUrl);
+      const withUrl = withLiveHost(data, nextUrl);
+      setCapture(withUrl.capture);
+      setBundle(withUrl);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Scan failed");
+      setStage("enter");
+      setLeaving(false);
+    }
   }, []);
 
   const finishRun = useCallback(() => {
@@ -103,9 +120,11 @@ export function ScanApp() {
     (async () => {
       const data = await loadMockScan();
       if (cancelled) return;
-      setUrl(data.capture.url);
-      setCapture(data.capture);
-      setBundle(data);
+      const liveUrl = `${window.location.origin}/demo`;
+      const withUrl = withLiveHost(data, liveUrl);
+      setUrl(liveUrl);
+      setCapture(withUrl.capture);
+      setBundle(withUrl);
       setStage(want);
     })();
     return () => {

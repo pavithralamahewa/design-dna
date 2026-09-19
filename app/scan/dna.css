@@ -289,8 +289,11 @@ h1.big em{font-style:normal;color:var(--flag)}
   color:var(--ink-dim);font-weight:400;margin-left:8px;letter-spacing:.05em}
 .agwhat{font-size:12.5px;line-height:18px;color:var(--ink-mid)}
 .agfind{font-size:12.5px;line-height:18px;color:var(--ink);margin-top:3px;display:none}
-.ag.done .agfind{display:block}
+.ag.run .agfind,.ag.done .agfind{display:block}
 .ag.done .agwhat{display:none}
+.tiles.waiting{display:flex;align-items:center;justify-content:center;padding:28px}
+.waitmsg{margin:0;font-family:"JetBrains Mono",ui-monospace,monospace;font-size:12px;
+  color:var(--ink-mid);text-align:center;max-width:28ch}
 .agms{font-family:"JetBrains Mono",ui-monospace,monospace;font-size:10.5px;color:var(--ink-dim);
   font-variant-numeric:tabular-nums;padding-top:3px;opacity:0}
 .ag.done .agms{opacity:1}

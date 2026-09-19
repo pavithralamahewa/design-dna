@@ -46,12 +46,30 @@ export type SiteIdentity = {
   hasThumbnail: boolean;
 };
 
+export type ChannelBreakdown = {
+  key: keyof typeof WEIGHTS;
+  weight: number;
+  jaccard: number;
+  weighted: number;
+  scanCount: number;
+  corpusCount: number;
+  intersection: number;
+};
+
+export type SimilarityExplain = {
+  host: string;
+  score: number;
+  channels: ChannelBreakdown[];
+};
+
 export type CorpusMatch = {
   host: string;
   key: string;
   score: number;
   thumbnail: string | null;
   entry: CorpusEntry;
+  /** Raw weighted-Jaccard inputs for this match (printed for the top candidate). */
+  explain: SimilarityExplain;
 };
 
 export type CorpusMatchResult = {
@@ -132,6 +150,19 @@ export function hostToSlug(host: string): string {
   return normalizeHost(host).replace(/[^a-z0-9._-]+/gi, "-");
 }
 
+export function isLocalHost(host: string): boolean {
+  const h = normalizeHost(host);
+  const hostname = h.split(":")[0] ?? h;
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "[::1]" ||
+    hostname === "::1" ||
+    hostname.endsWith(".local")
+  );
+}
+
 /** Parse public/corpus.json (or equivalent). Returns [] sites if shape is wrong — never invents rows. */
 export function parseCorpusJson(raw: unknown): CorpusFile {
   if (raw == null) {
@@ -183,21 +214,95 @@ function normalizeEntry(row: unknown): CorpusEntry | null {
     ? (r.tokens as Record<string, unknown>)
     : r;
 
-  return {
-    host,
-    key,
-    thumbnail: thumb,
-    fonts: toTokenList(tokens.fonts ?? tokens.fontSizes ?? tokens.fontSize),
-    radii: toTokenList(tokens.radii ?? tokens.radius ?? tokens.borderRadii),
-    spacing: toTokenList(tokens.spacing ?? tokens.spacings ?? tokens.gaps),
-    sizes: toTokenList(tokens.sizes ?? tokens.typeSizes ?? tokens.fontSizeValues),
-    groundLuminance: toTokenList(
+  // Real corpus rows use { v, c } bags: sizes=font sizes, fams=families,
+  // spaces/gaps=spacing, bgs→ground luminance. Flat TokenFingerprint rows
+  // already use fonts/radii/spacing/sizes/groundLuminance directly.
+  const corpusBag =
+    Array.isArray(r.fams) ||
+    Array.isArray(r.spaces) ||
+    Array.isArray(r.gaps) ||
+    Array.isArray(r.bgs);
+
+  const fonts = uniqueTokens([
+    ...toTokenList(tokens.fonts ?? tokens.fontSizes ?? tokens.fontSize),
+    ...(corpusBag
+      ? toTokenList(tokens.sizes ?? tokens.typeSizes ?? tokens.fontSizeValues)
+      : toTokenList(tokens.typeSizes ?? tokens.fontSizeValues)),
+    ...toTokenList(tokens.fams ?? tokens.families ?? tokens.fontFamilies),
+  ]);
+  const radii = toTokenList(tokens.radii ?? tokens.radius ?? tokens.borderRadii);
+  const spacing = uniqueTokens([
+    ...toTokenList(tokens.spacing ?? tokens.spacings),
+    ...toTokenList(tokens.spaces),
+    ...toTokenList(tokens.gaps),
+  ]);
+  const sizes = toTokenList(
+    corpusBag
+      ? (tokens.componentSizes ?? tokens.widths ?? tokens.dims)
+      : (tokens.sizes ?? tokens.componentSizes ?? tokens.widths ?? tokens.dims),
+  );
+  const groundLuminance = uniqueTokens([
+    ...toTokenList(
       tokens.groundLuminance ??
         tokens.groundLuminances ??
         tokens.luminance ??
         tokens.grounds,
     ),
+    ...luminanceFromColors(tokens.bgs ?? tokens.backgrounds),
+  ]);
+
+  return {
+    host,
+    key,
+    thumbnail: thumb,
+    fonts,
+    radii,
+    spacing,
+    sizes,
+    groundLuminance,
   };
+}
+
+function uniqueTokens(values: Array<string | number>): Array<string | number> {
+  const seen = new Set<string>();
+  const out: Array<string | number> = [];
+  for (const v of values) {
+    const k =
+      typeof v === "number" ? `n:${Math.round(v * 1000) / 1000}` : `s:${String(v).toLowerCase()}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
+function luminanceFromColors(value: unknown): number[] {
+  const colors = toTokenList(value);
+  const out: number[] = [];
+  for (const c of colors) {
+    if (typeof c !== "string") continue;
+    const L = relativeLuminance(c);
+    if (L != null) out.push(L);
+  }
+  return out;
+}
+
+function relativeLuminance(cssColor: string): number | null {
+  const m = cssColor.match(
+    /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i,
+  );
+  if (!m) return null;
+  const channel = (raw: string) => {
+    let c = Number(raw) / 255;
+    if (!Number.isFinite(c)) return null;
+    c = c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    return c;
+  };
+  const r = channel(m[1]!);
+  const g = channel(m[2]!);
+  const b = channel(m[3]!);
+  if (r == null || g == null || b == null) return null;
+  return Math.round((0.2126 * r + 0.7152 * g + 0.0722 * b) * 1000) / 1000;
 }
 
 function toTokenList(value: unknown): Array<string | number> {
@@ -207,8 +312,15 @@ function toTokenList(value: unknown): Array<string | number> {
       .map((v) => {
         if (typeof v === "number" && Number.isFinite(v)) return v;
         if (typeof v === "string" && v.trim()) return v.trim();
-        if (v && typeof v === "object" && "value" in (v as object)) {
-          const inner = (v as { value: unknown }).value;
+        if (v && typeof v === "object") {
+          const obj = v as Record<string, unknown>;
+          // Corpus uses { v, c }; some fixtures use { value }.
+          const inner =
+            "v" in obj
+              ? obj.v
+              : "value" in obj
+                ? obj.value
+                : undefined;
           if (typeof inner === "number" && Number.isFinite(inner)) return inner;
           if (typeof inner === "string" && inner.trim()) return inner.trim();
         }
@@ -251,15 +363,43 @@ function tokenize(values: Iterable<string | number>): Set<string> {
   return out;
 }
 
+export function explainSimilarity(
+  scan: TokenFingerprint,
+  corpus: TokenFingerprint,
+  host: string,
+): SimilarityExplain {
+  const channels: ChannelBreakdown[] = TOKEN_KEYS.map((key) => {
+    const setA = tokenize(scan[key]);
+    const setB = tokenize(corpus[key]);
+    let intersection = 0;
+    for (const x of setA) {
+      if (setB.has(x)) intersection += 1;
+    }
+    const j =
+      setA.size === 0 && setB.size === 0
+        ? 1
+        : setA.size === 0 || setB.size === 0
+          ? 0
+          : intersection / (setA.size + setB.size - intersection);
+    return {
+      key,
+      weight: WEIGHTS[key],
+      jaccard: j,
+      weighted: WEIGHTS[key] * j,
+      scanCount: setA.size,
+      corpusCount: setB.size,
+      intersection,
+    };
+  });
+  const score = channels.reduce((s, c) => s + c.weighted, 0);
+  return { host, score, channels };
+}
+
 export function weightedSimilarity(
   a: TokenFingerprint,
   b: TokenFingerprint,
 ): number {
-  let score = 0;
-  for (const key of TOKEN_KEYS) {
-    score += WEIGHTS[key] * jaccard(a[key], b[key]);
-  }
-  return score;
+  return explainSimilarity(a, b, "").score;
 }
 
 /**
@@ -274,12 +414,14 @@ export function matchCorpus(
   const identity = resolveSite(scannedHost, corpus);
   const scored: CorpusMatch[] = corpus.map((entry) => {
     const id = resolveSite(entry.host, corpus);
+    const explain = explainSimilarity(fingerprint, entry, entry.host);
     return {
       host: entry.host,
       key: entry.key,
-      score: weightedSimilarity(fingerprint, entry),
+      score: explain.score,
       thumbnail: id.hasThumbnail ? id.thumbnailPath : null,
       entry,
+      explain,
     };
   });
 
@@ -302,6 +444,25 @@ export function matchCorpus(
     corpusEmpty: corpus.length === 0,
   });
 
+  if (closest) {
+    // eslint-disable-next-line no-console -- required: print raw weighted-Jaccard inputs for top candidate
+    console.info(
+      "[corpus] top candidate weighted-Jaccard inputs",
+      closest.host,
+      closest.explain.channels.map((c) => ({
+        channel: c.key,
+        weight: c.weight,
+        scanTokens: c.scanCount,
+        corpusTokens: c.corpusCount,
+        intersection: c.intersection,
+        jaccard: Number(c.jaccard.toFixed(4)),
+        weighted: Number(c.weighted.toFixed(4)),
+      })),
+      "score",
+      Number(closest.score.toFixed(4)),
+    );
+  }
+
   return {
     top5,
     self: selfRow,
@@ -323,15 +484,22 @@ function buildAbsenceNote(args: {
     return "Corpus data is missing. Nothing to compare against.";
   }
 
+  if (isLocalHost(identity.host) && !identity.hasCorpusEntry) {
+    if (closest) {
+      return `This is a local page, so it has no corpus entry. ${closestNeighbour(closest)}.`;
+    }
+    return "This is a local page, so it has no corpus entry.";
+  }
+
   if (!identity.hasCorpusEntry && !hasMatchAboveFloor) {
     if (closest) {
-      return `Nothing in the corpus looks like you. The closest is ${formatPct(closest.score)}.`;
+      return `Nothing in the corpus looks like you. ${closestNeighbour(closest)}.`;
     }
     return "Nothing in the corpus looks like you.";
   }
 
   if (!hasMatchAboveFloor && closest) {
-    return `Nothing in the corpus looks like you. The closest is ${formatPct(closest.score)}.`;
+    return `Nothing in the corpus looks like you. ${closestNeighbour(closest)}.`;
   }
 
   if (!identity.hasThumbnail && identity.hasCorpusEntry) {
@@ -341,8 +509,22 @@ function buildAbsenceNote(args: {
   return null;
 }
 
+function closestNeighbour(closest: CorpusMatch): string {
+  // Never a bare "0%" — that reads as "found nothing" (Rule 10).
+  if (!(closest.score > 0)) {
+    return `Closest measured neighbour: ${closest.host} — no shared measured tokens`;
+  }
+  const pct = Math.round(closest.score * 100);
+  if (pct === 0) {
+    return `Closest measured neighbour: ${closest.host} at <1%`;
+  }
+  return `Closest measured neighbour: ${closest.host} at ${pct}%`;
+}
+
 export function formatPct(score: number): string {
+  if (!(score > 0)) return "no shared tokens";
   const pct = Math.round(score * 100);
+  if (pct === 0) return "<1%";
   return `${pct}%`;
 }
 

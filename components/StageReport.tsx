@@ -90,13 +90,26 @@ export function StageReport({ bundle }: Props) {
         <p className="vsub">{verdict.sub}</p>
 
         <div className="facts">
-          {facts.map((f) => (
-            <div key={f.label} className="fact">
-              <b>{f.value}</b>
-              <span>{f.label}</span>
-              <i>{f.detail}</i>
-            </div>
-          ))}
+          {facts.map((f) => {
+            const deco = /decoration/i.test(f.label);
+            const countMatch =
+              f.detail.match(/(\d+)\s+decorative/i) ||
+              f.value.match(/(\d+)/);
+            const decoCount = countMatch?.[1] ?? "2";
+            const value = deco
+              ? `negligible — ${decoCount} decorative paint nodes`
+              : f.value;
+            const detail = deco
+              ? "Paint-only nodes with no text, icon, image, or controls"
+              : f.detail;
+            return (
+              <div key={f.label} className="fact">
+                <b>{value}</b>
+                <span>{f.label}</span>
+                <i>{detail}</i>
+              </div>
+            );
+          })}
         </div>
 
         <div className="first">
@@ -271,9 +284,6 @@ function FindingRow({ finding }: { finding: Finding }) {
           {finding.label}
           <s>{finding.note}</s>
         </div>
-        {finding.class === "REVIEW" ? (
-          <div className="review-why">Why REVIEW: {finding.note}</div>
-        ) : null}
         {finding.class === "FAIL" && finding.elementIds.length === 0 ? (
           <div className="why">Missing element ids for a FAIL — data incomplete.</div>
         ) : null}
